@@ -3,16 +3,110 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Cadence — Focus OS</title>
-    <meta name="description" content="A calm, high-velocity Focus OS for seamless Personal and Office productivity with deep Google Ecosystem synergy." />
-    <meta property="og:title" content="Cadence — Focus OS" />
-    <meta property="og:description" content="A calm, high-velocity Focus OS for seamless Personal and Office productivity with deep Google Ecosystem synergy." />
+    <title>Cadence — Focus OS | Free Productivity Workspace & Customizations</title>
+    <meta
+      name="description"
+      content="A calm, high-velocity Focus OS for Personal and Office productivity with Google Tasks v1 import, Google Sheets sync, and live Gmail OTP alerts. 100% Free Forever (₹0) with optional ₹99/mo, ₹499/yr, and ₹3,999 Lifetime customizations."
+    />
+    <meta
+      name="keywords"
+      content="Cadence Focus OS, Google Tasks v1 JSON import, Google Sheets task sync, Gmail OTP notification toast, Pomodoro timer, Eisenhower Matrix, Kanban board"
+    />
+    <meta name="author" content="Cadence Focus OS" />
+    <meta name="robots" content="index, follow" />
+    <meta name="theme-color" content="#4F46E5" />
+
+    <!-- OpenGraph / Social Sharing -->
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Cadence — Focus OS" />
+    <meta
+      property="og:title"
+      content="Cadence — Focus OS | Free Productivity Workspace & Customizations"
+    />
+    <meta
+      property="og:description"
+      content="A calm, high-velocity Focus OS for Personal and Office productivity with Google Tasks v1 import, Google Sheets sync, and live Gmail OTP alerts. 100% Free Forever (₹0) with optional ₹99/mo, ₹499/yr, and ₹3,999 Lifetime customizations."
+    />
+    <meta property="og:locale" content="en_IN" />
+
+    <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="Cadence — Focus OS | Free Productivity Workspace & Customizations"
+    />
+    <meta
+      name="twitter:description"
+      content="A calm, high-velocity Focus OS for Personal and Office productivity with Google Tasks v1 import, Google Sheets sync, and live Gmail OTP alerts. 100% Free Forever (₹0) with optional ₹99/mo, ₹499/yr, and ₹3,999 Lifetime customizations."
+    />
+
+    <!-- Dynamic Canonical & OG URL Resolution -->
+    <script>
+      (function () {
+        var canonicalUrl = window.location.origin + window.location.pathname;
+        var link = document.createElement('link');
+        link.rel = 'canonical';
+        link.href = canonicalUrl;
+        document.head.appendChild(link);
+
+        var ogUrl = document.createElement('meta');
+        ogUrl.setAttribute('property', 'og:url');
+        ogUrl.content = canonicalUrl;
+        document.head.appendChild(ogUrl);
+      })();
+    </script>
+
+    <!-- Schema.org JSON-LD Structured Data -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Cadence — Focus OS",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web",
+        "description": "A calm, high-velocity Focus OS for Personal and Office productivity with Google Tasks v1 import, bidirectional Google Sheets sync, and real-time Gmail OTP notifications.",
+        "offers": {
+          "@type": "AggregateOffer",
+          "priceCurrency": "INR",
+          "lowPrice": "0",
+          "highPrice": "3999",
+          "offerCount": "4",
+          "offers": [
+            {
+              "@type": "Offer",
+              "name": "Free Forever Core Platform",
+              "price": "0",
+              "priceCurrency": "INR",
+              "description": "All 6 productivity views, Google Tasks v1 JSON import, Google Sheets sync, and real-time Gmail OTP notifications included free forever."
+            },
+            {
+              "@type": "Offer",
+              "name": "Monthly Customization Plan",
+              "price": "99",
+              "priceCurrency": "INR",
+              "description": "Monthly customization plan with custom Pomodoro intervals, custom Google Sheet tab mapping, and custom branding."
+            },
+            {
+              "@type": "Offer",
+              "name": "Yearly Customization Plan",
+              "price": "499",
+              "priceCurrency": "INR",
+              "description": "Annual customization pass saving 58% with custom Kanban WIP limits, custom keyboard shortcuts, and 24-hour priority turnaround."
+            },
+            {
+              "@type": "Offer",
+              "name": "Lifetime Customization Pass",
+              "price": "3999",
+              "priceCurrency": "INR",
+              "description": "One-time payment for unlimited lifetime bespoke UI customizations, Google Apps Script pipelines, and custom schema importers."
+            }
+          ]
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

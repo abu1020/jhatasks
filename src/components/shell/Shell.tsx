@@ -40,7 +40,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import type { ViewId, WorkspaceFilter } from '../../db/schema';
+import type { Task, ViewId, WorkspaceFilter } from '../../db/schema';
 import { computeTodayProgress, getTodayStr } from '../../lib/dateUtils';
 import {
   fetchFirestoreUserTasksAndEvents,
@@ -49,6 +49,8 @@ import {
   fetchGoogleTasksLive,
   googleSignIn,
   logout,
+  emailSignIn,
+  quickLocalSignIn,
 } from '../../lib/firebase';
 import { parseGoogleTasksV1Json, type GmailNotificationItem } from '../../lib/nlpParser';
 import { useCadenceStore } from '../../store/useCadenceStore';
@@ -71,93 +73,182 @@ export const VIEW_CONFIG: {
 
 export function GoogleSignInButton({
   compact = false,
+  showEmailOption = true,
   onSuccess,
 }: {
   compact?: boolean;
+  showEmailOption?: boolean;
   onSuccess?: () => void;
 }) {
   const setAuthUser = useCadenceStore((s) => s.setAuthUser);
+  const setShowLandingPage = useCadenceStore((s) => s.setShowLandingPage);
+  const setActiveView = useCadenceStore((s) => s.setActiveView);
   const mergeExternalTasks = useCadenceStore((s) => s.mergeExternalTasks);
   const mergeExternalEvents = useCadenceStore((s) => s.mergeExternalEvents);
   const ingestGmailNotifications = useCadenceStore((s) => s.ingestGmailNotifications);
   const addToast = useCadenceStore((s) => s.addToast);
   const [busy, setBusy] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [showEmailForm, setShowEmailForm] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [nameInput, setNameInput] = useState('');
+
+  const applyAuthResult = (res: {
+    user: { uid: string; email: string | null; displayName: string | null; photoURL: string | null };
+    accessToken: string | null;
+  }) => {
+    setAuthUser({
+      uid: res.user.uid,
+      email: res.user.email,
+      name: res.user.displayName,
+      photo: res.user.photoURL,
+      hasToken: Boolean(res.accessToken),
+    });
+    // Immediately unlock full software workspace
+    setShowLandingPage(false);
+    setActiveView('my_day');
+
+    addToast({
+      message: `Signed in as ${res.user.displayName || res.user.email}. Full software access unlocked!`,
+      tone: 'success',
+    });
+    if (res.accessToken && res.user.email) {
+      fetchGmailNotificationsLive(res.user.email)
+        .then((items) => {
+          ingestGmailNotifications(items, { forceToastNewest: true });
+        })
+        .catch(() => {});
+    }
+    fetchFirestoreUserTasksAndEvents(res.user.uid)
+      .then((cloudData) => {
+        if (cloudData.tasks.length > 0) mergeExternalTasks(cloudData.tasks);
+        if (cloudData.events.length > 0) mergeExternalEvents(cloudData.events);
+      })
+      .catch(() => {});
+    onSuccess?.();
+  };
 
   const handleSignIn = async () => {
     setBusy(true);
+    setAuthError(null);
     try {
       const res = await googleSignIn();
-      setAuthUser({
-        uid: res.user.uid,
-        email: res.user.email,
-        name: res.user.displayName,
-        photo: res.user.photoURL,
-        hasToken: Boolean(res.accessToken),
-      });
-      addToast({
-        message: `Signed in as ${res.user.displayName || res.user.email}`,
-        tone: 'success',
-      });
-      if (res.accessToken) {
-        fetchGmailNotificationsLive(res.user.email)
-          .then((items) => {
-            ingestGmailNotifications(items, { forceToastNewest: true });
-          })
-          .catch(() => {});
-      }
-      fetchFirestoreUserTasksAndEvents(res.user.uid)
-        .then((cloudData) => {
-          if (cloudData.tasks.length > 0) mergeExternalTasks(cloudData.tasks);
-          if (cloudData.events.length > 0) mergeExternalEvents(cloudData.events);
-        })
-        .catch(() => {});
-      onSuccess?.();
+      applyAuthResult(res);
     } catch (err: any) {
+      const msg = err?.message || 'Could not complete Google sign-in';
+      setAuthError(msg);
       addToast({
-        message: err?.message?.includes('popup')
-          ? 'Google sign-in popup was closed'
-          : 'Could not complete Google sign-in',
+        message: err?.isUnauthorizedDomain
+          ? 'Preview domain not whitelisted yet. Enter your email below to sign in.'
+          : err?.isPopupBlocked
+          ? 'Popup was blocked. Enter your email below to sign in.'
+          : msg,
         tone: 'warning',
       });
+      setShowEmailForm(true);
     } finally {
       setBusy(false);
     }
   };
 
+  const handleEmailSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = emailInput.trim();
+    if (!email || !email.includes('@')) {
+      setAuthError('Please enter a valid email address.');
+      return;
+    }
+    const res = emailSignIn(email, nameInput.trim() || undefined);
+    applyAuthResult(res);
+  };
+
   return (
-    <button
-      type="button"
-      onClick={handleSignIn}
-      disabled={busy}
-      className={`gsi-material-button inline-flex items-center justify-center gap-2.5 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text-1)] hover:bg-[var(--surface-3)] transition font-medium whitespace-nowrap shrink-0 ${
-        compact ? 'px-3 py-2 text-xs min-h-[38px]' : 'w-full px-3.5 py-2.5 text-xs min-h-[40px]'
-      }`}
-    >
-      <svg
-        version="1.1"
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 48 48"
-        className="w-4 h-4 shrink-0"
+    <div className="space-y-2 w-full">
+      <button
+        type="button"
+        onClick={handleSignIn}
+        disabled={busy}
+        className={`gsi-material-button inline-flex items-center justify-center gap-2.5 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text-1)] hover:bg-[var(--surface-3)] transition font-medium whitespace-nowrap shrink-0 ${
+          compact ? 'px-3 py-2 text-xs min-h-[38px]' : 'w-full px-3.5 py-2.5 text-xs min-h-[40px]'
+        }`}
       >
-        <path
-          fill="#EA4335"
-          d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
-        />
-        <path
-          fill="#4285F4"
-          d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
-        />
-        <path
-          fill="#FBBC05"
-          d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
-        />
-        <path
-          fill="#34A853"
-          d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
-        />
-      </svg>
-      <span>{busy ? 'Connecting...' : 'Sign in with Google'}</span>
-    </button>
+        <svg
+          version="1.1"
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 48 48"
+          className="w-4 h-4 shrink-0"
+        >
+          <path
+            fill="#EA4335"
+            d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+          />
+          <path
+            fill="#4285F4"
+            d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+          />
+          <path
+            fill="#FBBC05"
+            d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+          />
+          <path
+            fill="#34A853"
+            d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+          />
+        </svg>
+        <span>{busy ? 'Connecting to Google...' : 'Sign in with Google'}</span>
+      </button>
+
+      {showEmailOption && !showEmailForm && (
+        <button
+          type="button"
+          onClick={() => setShowEmailForm(true)}
+          className="w-full py-1.5 px-3 rounded-xl border border-dashed border-[var(--border-strong)] hover:border-[var(--accent)] bg-[var(--surface-1)] hover:bg-[var(--accent-soft)] text-[11px] font-semibold text-[var(--text-2)] hover:text-[var(--accent)] transition text-center"
+        >
+          Sign in with Email
+        </button>
+      )}
+
+      {showEmailForm && (
+        <form onSubmit={handleEmailSubmit} className="space-y-2 p-2.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
+          <input
+            type="email"
+            required
+            value={emailInput}
+            onChange={(e) => setEmailInput(e.target.value)}
+            placeholder="your.email@example.com"
+            className="input-base w-full px-2.5 py-1.5 text-xs rounded-lg"
+          />
+          <input
+            type="text"
+            value={nameInput}
+            onChange={(e) => setNameInput(e.target.value)}
+            placeholder="Your Name (Optional)"
+            className="input-base w-full px-2.5 py-1.5 text-xs rounded-lg"
+          />
+          <div className="flex items-center gap-2">
+            <button
+              type="submit"
+              className="btn-accent flex-1 py-1.5 px-2.5 rounded-lg text-xs font-semibold"
+            >
+              Sign In & Open Software
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowEmailForm(false)}
+              className="btn-ghost py-1.5 px-2 rounded-lg text-xs text-[var(--text-3)]"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+
+      {authError && (
+        <p className="text-[11px] text-[#F43F5E] px-1 leading-snug">
+          {authError}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -601,6 +692,203 @@ function NotificationsPopover({
 }
 
 /**
+ * Dedicated 'Import Google Tasks' File Picker Component within the Settings Popover.
+ * Parses standard Google Tasks v1 JSON (`kind: "tasks#tasks"`, `tasks#taskLists`, or raw item arrays)
+ * and maps items (including parent/child subtasks, RFC3339 due timestamps, completion status,
+ * notes checklists, and links) directly to our internal Task schema.
+ */
+export function ImportGoogleTasksPicker({
+  onImported,
+}: {
+  onImported?: (tasks: Task[], fileName: string) => void;
+}) {
+  const tasks = useCadenceStore((s) => s.tasks);
+  const workspace = useCadenceStore((s) => s.workspace);
+  const importTasksBatch = useCadenceStore((s) => s.importTasksBatch);
+  const addToast = useCadenceStore((s) => s.addToast);
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [targetWorkspace, setTargetWorkspace] = useState<'office' | 'personal'>(
+    workspace === 'personal' ? 'personal' : 'office'
+  );
+  const [isDragging, setIsDragging] = useState(false);
+  const [isParsing, setIsParsing] = useState(false);
+  const [lastImportSummary, setLastImportSummary] = useState<{
+    fileName: string;
+    taskCount: number;
+    subtaskCount: number;
+  } | null>(null);
+
+  const processGoogleTasksFile = async (file: File) => {
+    setIsParsing(true);
+    try {
+      const rawJson = await file.text();
+      const maxOrder = tasks.reduce(
+        (m, t) => (t.sort_order > m ? t.sort_order : m),
+        0
+      );
+      const parsedTasks = parseGoogleTasksV1Json(rawJson, {
+        defaultWorkspace: targetWorkspace,
+        baseSortOrder: maxOrder,
+      });
+
+      if (parsedTasks.length === 0) {
+        addToast({
+          message: `No valid Google Tasks v1 items found in "${file.name}"`,
+          tone: 'warning',
+        });
+        return;
+      }
+
+      const subtaskCount = parsedTasks.reduce(
+        (acc, t) => acc + (t.subtasks?.length ?? 0),
+        0
+      );
+
+      await importTasksBatch(parsedTasks);
+      setLastImportSummary({
+        fileName: file.name,
+        taskCount: parsedTasks.length,
+        subtaskCount,
+      });
+      addToast({
+        message: `Imported ${parsedTasks.length} task${
+          parsedTasks.length > 1 ? 's' : ''
+        }${
+          subtaskCount > 0 ? ` (${subtaskCount} subtasks)` : ''
+        } from "${file.name}"`,
+        tone: 'success',
+      });
+      onImported?.(parsedTasks, file.name);
+    } catch {
+      addToast({
+        message: `Failed to parse "${file.name}". Expected Google Tasks v1 JSON format.`,
+        tone: 'danger',
+      });
+    } finally {
+      setIsParsing(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    void processGoogleTasksFile(file);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    void processGoogleTasksFile(file);
+  };
+
+  return (
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        setIsDragging(true);
+      }}
+      onDragLeave={() => setIsDragging(false)}
+      onDrop={handleDrop}
+      className={`rounded-xl border p-2.5 transition ${
+        isDragging
+          ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+          : 'border-[var(--border-strong)] bg-[var(--surface-1)]'
+      }`}
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json,application/json"
+        aria-label="Import Google Tasks JSON file"
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
+      <div className="flex items-center justify-between gap-1.5 mb-2">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Upload className="w-3.5 h-3.5 text-[var(--accent)] shrink-0" />
+          <span className="text-xs font-semibold text-[var(--text-1)] whitespace-nowrap">
+            Import Google Tasks
+          </span>
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-[var(--accent)] border border-[var(--border)] whitespace-nowrap shrink-0">
+            v1
+          </span>
+        </div>
+
+        <div
+          className="inline-flex items-center rounded-lg bg-[var(--surface-2)] p-0.5 border border-[var(--border)] text-[10px] shrink-0"
+          role="group"
+          aria-label="Default workspace for imported Google Tasks"
+        >
+          <button
+            type="button"
+            onClick={() => setTargetWorkspace('office')}
+            className={`px-1.5 py-0.5 rounded-md font-semibold transition ${
+              targetWorkspace === 'office'
+                ? 'bg-[var(--accent)] text-white'
+                : 'text-[var(--text-3)] hover:text-[var(--text-1)]'
+            }`}
+          >
+            Office
+          </button>
+          <button
+            type="button"
+            onClick={() => setTargetWorkspace('personal')}
+            className={`px-1.5 py-0.5 rounded-md font-semibold transition ${
+              targetWorkspace === 'personal'
+                ? 'bg-[var(--accent)] text-white'
+                : 'text-[var(--text-3)] hover:text-[var(--text-1)]'
+            }`}
+          >
+            Personal
+          </button>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        disabled={isParsing}
+        onClick={() => fileInputRef.current?.click()}
+        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-[var(--text-1)] bg-[var(--accent-soft)] hover:opacity-95 border border-[var(--border)] transition"
+      >
+        <span className="inline-flex items-center gap-2 whitespace-nowrap">
+          <FileJson className="w-3.5 h-3.5 text-[var(--accent)] shrink-0" />
+          <span>
+            {isParsing
+              ? 'Parsing Google Tasks v1…'
+              : 'Select or drop Google Tasks .json'}
+          </span>
+        </span>
+        <span className="text-[10px] font-semibold text-[var(--accent)] shrink-0 ml-2">
+          Browse
+        </span>
+      </button>
+
+      {lastImportSummary && (
+        <div
+          role="status"
+          className="mt-1.5 flex items-center justify-between px-2 py-1 rounded-lg bg-[#10B981]/12 border border-[#10B981]/30 text-[11px] text-[#10B981]"
+        >
+          <span className="truncate font-medium">
+            Imported {lastImportSummary.taskCount} tasks
+            {lastImportSummary.subtaskCount > 0
+              ? ` (${lastImportSummary.subtaskCount} subtasks)`
+              : ''}{' '}
+            · {lastImportSummary.fileName}
+          </span>
+          <Check className="w-3.5 h-3.5 shrink-0 ml-1.5" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * Settings & Google Ecosystem Popover (clamped inside viewport even at 320px)
  */
 function SettingsPopover({
@@ -610,10 +898,10 @@ function SettingsPopover({
 }) {
   const settingsOpen = useCadenceStore((s) => s.settingsOpen);
   const setSettingsOpen = useCadenceStore((s) => s.setSettingsOpen);
+  const setShowLandingPage = useCadenceStore((s) => s.setShowLandingPage);
   const setActiveModal = useCadenceStore((s) => s.setActiveModal);
   const tasks = useCadenceStore((s) => s.tasks);
   const events = useCadenceStore((s) => s.events);
-  const workspace = useCadenceStore((s) => s.workspace);
   const importTasksBatch = useCadenceStore((s) => s.importTasksBatch);
   const syncTasksWithGoogleSheets = useCadenceStore((s) => s.syncTasksWithGoogleSheets);
   const autoSyncSheets = useCadenceStore((s) => s.autoSyncSheets);
@@ -625,8 +913,7 @@ function SettingsPopover({
   const setAuthUser = useCadenceStore((s) => s.setAuthUser);
 
   const popRef = useRef<HTMLDivElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [coords, setCoords] = useState({ top: 60, left: 16, width: 316 });
+  const [coords, setCoords] = useState({ top: 60, left: 16, width: 344 });
   const [syncingCal, setSyncingCal] = useState(false);
   const [syncingTasks, setSyncingTasks] = useState(false);
   const [syncingSheet, setSyncingSheet] = useState(false);
@@ -636,7 +923,7 @@ function SettingsPopover({
     if (!btn) return;
     const rect = btn.getBoundingClientRect();
     const vw = window.innerWidth;
-    const width = Math.min(324, vw - 16);
+    const width = Math.min(348, vw - 16);
     const left = Math.max(8, Math.min(rect.right - width, vw - width - 8));
     const top = Math.min(rect.bottom + 8, window.innerHeight - 480);
     setCoords({ top: Math.max(8, top), left, width });
@@ -672,49 +959,6 @@ function SettingsPopover({
   }, [settingsOpen, setSettingsOpen]);
 
   if (!settingsOpen || typeof document === 'undefined') return null;
-
-  const handleFileImportGoogleTasksV1 = async (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-
-    try {
-      const text = await file.text();
-      const maxOrder = tasks.reduce(
-        (m, t) => (t.sort_order > m ? t.sort_order : m),
-        0
-      );
-      const defaultWs = workspace === 'personal' ? 'personal' : 'office';
-      const parsedTasks = parseGoogleTasksV1Json(text, {
-        defaultWorkspace: defaultWs,
-        baseSortOrder: maxOrder,
-      });
-
-      if (parsedTasks.length === 0) {
-        addToast({
-          message: `No valid Google Tasks v1 items found in "${file.name}"`,
-          tone: 'warning',
-        });
-        return;
-      }
-
-      await importTasksBatch(parsedTasks);
-      addToast({
-        message: `Imported ${parsedTasks.length} task${
-          parsedTasks.length > 1 ? 's' : ''
-        } from "${file.name}" & synced to Google Sheets`,
-        tone: 'success',
-      });
-      setSettingsOpen(false);
-    } catch {
-      addToast({
-        message: `Failed to parse "${file.name}". Expected Google Tasks v1 JSON format.`,
-        tone: 'danger',
-      });
-    }
-  };
 
   const handlePullLiveGoogleTasks = async () => {
     setSyncingTasks(true);
@@ -846,15 +1090,6 @@ function SettingsPopover({
       }}
       className="popover-surface rounded-2xl p-3 space-y-2.5"
     >
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".json,application/json"
-        aria-label="Upload Google Tasks v1 JSON file"
-        onChange={(e) => void handleFileImportGoogleTasksV1(e)}
-        className="hidden"
-      />
-
       <div className="px-2 py-1 border-b border-[var(--border)]">
         <div className="text-xs font-semibold text-[var(--text-1)]">
           Google Workspace & Settings
@@ -889,21 +1124,9 @@ function SettingsPopover({
         </div>
       )}
 
-      <div className="space-y-1">
-        {/* Direct Google Tasks v1 JSON File Import in Settings Popover */}
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold text-[var(--text-1)] bg-[var(--accent-soft)] hover:opacity-95 border border-[var(--border-strong)] transition"
-        >
-          <span className="inline-flex items-center gap-2.5">
-            <Upload className="w-4 h-4 text-[var(--accent)]" />
-            <span>Import Google Tasks JSON (.json)</span>
-          </span>
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-[var(--accent)]">
-            v1 File
-          </span>
-        </button>
+      <div className="space-y-1.5">
+        {/* Dedicated 'Import Google Tasks' File Picker Component */}
+        <ImportGoogleTasksPicker />
 
         {/* Google Tasks API Live Sync + Hub */}
         <button
@@ -1017,6 +1240,23 @@ function SettingsPopover({
 
         <button
           type="button"
+          onClick={() => {
+            setSettingsOpen(false);
+            setShowLandingPage(true);
+          }}
+          className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-3)] hover:text-[var(--text-1)] transition"
+        >
+          <span className="inline-flex items-center gap-2.5">
+            <Sparkles className="w-4 h-4 text-[var(--accent)]" />
+            <span>Website, Features & Pricing</span>
+          </span>
+          <span className="text-[11px] text-[var(--accent)] font-semibold tnum">
+            ₹0 / ₹99+
+          </span>
+        </button>
+
+        <button
+          type="button"
           onClick={handleBackupJson}
           className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-3)] hover:text-[var(--text-1)] transition"
         >
@@ -1059,6 +1299,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const openComposer = useCadenceStore((s) => s.openComposer);
   const userName = useCadenceStore((s) => s.userName);
   const userEmail = useCadenceStore((s) => s.userEmail);
+  const setShowLandingPage = useCadenceStore((s) => s.setShowLandingPage);
 
   const setGmailPollStatus = useCadenceStore((s) => s.setGmailPollStatus);
   const setAuthUser = useCadenceStore((s) => s.setAuthUser);
@@ -1443,8 +1684,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </span>
         </button>
 
-        {/* Right: Focus timer pill + today progress ring + grouped notifications/theme/settings + primary "New task" */}
+        {/* Right: Website link + Focus timer pill + today progress ring + grouped notifications/theme/settings + primary "New task" */}
         <div className="flex items-center gap-1 sm:gap-2.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowLandingPage(true)}
+            className="hidden md:inline-flex btn-ghost px-2.5 py-1.5 rounded-xl text-xs font-medium text-[var(--text-2)] hover:text-[var(--text-1)] whitespace-nowrap shrink-0"
+          >
+            Website & Pricing
+          </button>
+
           <FocusTimerBanner />
 
           {/* Today progress ring (uses exact shared formula) */}

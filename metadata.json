@@ -1,6 +1,8 @@
 {
   "name": "Cadence — Focus OS",
-  "description": "A calm, high-velocity Focus OS for seamless Personal and Office productivity with deep Google Ecosystem synergy.",
+  "description": "A calm, high-velocity Focus OS for Personal and Office productivity with Google Tasks v1 import, Google Sheets sync, and live Gmail OTP alerts. 100% Free Forever (₹0) with optional ₹99/mo, ₹499/yr, and ₹3,999 Lifetime customizations.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

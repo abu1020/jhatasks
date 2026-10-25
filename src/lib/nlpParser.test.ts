@@ -129,13 +129,30 @@ test('Auto-scheduler plans unscheduled tasks around existing events between 09:0
   assert.equal(plan[0].due_time, '09:30');
 });
 
-test('parseGoogleTasksV1Json converts Google Tasks v1 schema with parent subtasks, links, and NLP tags', () => {
+test('parseGoogleTasksV1Json converts Google Tasks v1 schema with parent subtasks, position sorting, links, and NLP tags', () => {
   const sampleV1 = {
     kind: 'tasks#tasks',
     items: [
       {
         kind: 'tasks#task',
+        id: 'parent_200',
+        position: '00000000000000000002',
+        title: 'Review Personal Budget #personal',
+        status: 'completed',
+        completed: '2026-10-25T09:15:00.000Z',
+      },
+      {
+        kind: 'tasks#task',
+        id: 'deleted_999',
+        position: '00000000000000000000',
+        title: 'Deleted task should be skipped',
+        deleted: true,
+        status: 'needsAction',
+      },
+      {
+        kind: 'tasks#task',
         id: 'parent_101',
+        position: '00000000000000000001',
         title: 'Prepare Series B Board Deck #office !urgent',
         notes: 'Ensure ARR metrics are verified.\n- [x] Export cohort table\n- [ ] Review with CFO',
         status: 'needsAction',
@@ -152,6 +169,7 @@ test('parseGoogleTasksV1Json converts Google Tasks v1 schema with parent subtask
         kind: 'tasks#task',
         id: 'child_102',
         parent: 'parent_101',
+        position: '00000000000000000001',
         title: 'Upload final PDF to data room',
         status: 'completed',
       },
@@ -159,7 +177,7 @@ test('parseGoogleTasksV1Json converts Google Tasks v1 schema with parent subtask
   };
 
   const parsed = parseGoogleTasksV1Json(sampleV1, { todayStr: '2026-10-25' });
-  assert.equal(parsed.length, 1);
+  assert.equal(parsed.length, 2);
   const task = parsed[0];
   assert.equal(task.title, 'Prepare Series B Board Deck');
   assert.equal(task.workspace, 'office');
@@ -172,6 +190,13 @@ test('parseGoogleTasksV1Json converts Google Tasks v1 schema with parent subtask
   assert.equal(task.subtasks[0].done, true);
   assert.equal(task.attachments.length, 1);
   assert.equal(task.attachments[0].name, 'Series B Narrative Doc');
+  assert.equal(task.attachments[0].kind, 'doc');
+
+  const second = parsed[1];
+  assert.equal(second.title, 'Review Personal Budget');
+  assert.equal(second.workspace, 'personal');
+  assert.equal(second.status, 'done');
+  assert.equal(second.completed_at, '2026-10-25T09:15:00.000Z');
 });
 
 test('extractOtpFromText and classifyGmailMessage detect OTP codes and avoid year false positives', () => {

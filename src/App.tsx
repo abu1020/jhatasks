@@ -1,12 +1,7 @@
-import React, { useEffect } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { MotionConfig } from 'motion/react';
 import { AppShell } from './components/shell/Shell';
-import { MyDayView } from './components/views/MyDayView';
-import { BoardView } from './components/views/BoardView';
-import { ListView } from './components/views/ListView';
-import { CalendarView } from './components/views/CalendarView';
-import { MatrixView } from './components/views/MatrixView';
-import { InsightsView } from './components/views/InsightsView';
+import { LandingWebsite } from './components/views/LandingWebsite';
 import { TaskComposerModal } from './components/modals/TaskComposer';
 import { TaskDetailDrawer } from './components/modals/TaskDetailDrawer';
 import { EcosystemModals } from './components/modals/EcosystemModals';
@@ -16,10 +11,30 @@ import { fetchFirestoreUserTasksAndEvents, initAuth } from './lib/firebase';
 import { useCadenceStore } from './store/useCadenceStore';
 import type { ViewId } from './db/schema';
 
+const MyDayView = lazy(() =>
+  import('./components/views/MyDayView').then((m) => ({ default: m.MyDayView }))
+);
+const BoardView = lazy(() =>
+  import('./components/views/BoardView').then((m) => ({ default: m.BoardView }))
+);
+const ListView = lazy(() =>
+  import('./components/views/ListView').then((m) => ({ default: m.ListView }))
+);
+const CalendarView = lazy(() =>
+  import('./components/views/CalendarView').then((m) => ({ default: m.CalendarView }))
+);
+const MatrixView = lazy(() =>
+  import('./components/views/MatrixView').then((m) => ({ default: m.MatrixView }))
+);
+const InsightsView = lazy(() =>
+  import('./components/views/InsightsView').then((m) => ({ default: m.InsightsView }))
+);
+
 export default function App() {
   const theme = useCadenceStore((s) => s.theme);
   const workspace = useCadenceStore((s) => s.workspace);
   const activeView = useCadenceStore((s) => s.activeView);
+  const showLandingPage = useCadenceStore((s) => s.showLandingPage);
   const timerRunning = useCadenceStore((s) => s.focusTimer.running);
 
   // Sync dark mode class on <html>
@@ -90,6 +105,7 @@ export default function App() {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         const st = useCadenceStore.getState();
+        st.setShowLandingPage(false);
         st.setCommandPaletteOpen(!st.commandPaletteOpen);
         return;
       }
@@ -135,6 +151,7 @@ export default function App() {
 
       if (key === 'n') {
         e.preventDefault();
+        st.setShowLandingPage(false);
         st.openComposer();
       } else if (key === 'b') {
         e.preventDefault();
@@ -175,14 +192,26 @@ export default function App() {
       <div className={`${wsClass} min-h-dvh bg-[var(--bg)] text-[var(--text-1)] relative`}>
         <div className="ambient-glow" aria-hidden="true" />
 
-        <AppShell>
-          {activeView === 'my_day' && <MyDayView />}
-          {activeView === 'board' && <BoardView />}
-          {activeView === 'list' && <ListView />}
-          {activeView === 'calendar' && <CalendarView />}
-          {activeView === 'matrix' && <MatrixView />}
-          {activeView === 'insights' && <InsightsView />}
-        </AppShell>
+        {showLandingPage ? (
+          <LandingWebsite />
+        ) : (
+          <AppShell>
+            <Suspense
+              fallback={
+                <div className="p-8 text-sm text-[var(--text-3)] animate-pulse">
+                  Loading workspace view...
+                </div>
+              }
+            >
+              {activeView === 'my_day' && <MyDayView />}
+              {activeView === 'board' && <BoardView />}
+              {activeView === 'list' && <ListView />}
+              {activeView === 'calendar' && <CalendarView />}
+              {activeView === 'matrix' && <MatrixView />}
+              {activeView === 'insights' && <InsightsView />}
+            </Suspense>
+          </AppShell>
+        )}
 
         <TaskComposerModal />
         <TaskDetailDrawer />
@@ -194,3 +223,4 @@ export default function App() {
     </MotionConfig>
   );
 }
+

@@ -279,7 +279,9 @@ async function startServer() {
       status: ['todo', 'in_progress', 'in_review', 'done'].includes(body.status)
         ? body.status
         : existing?.status || 'todo',
-      priority: Number(body.priority) || existing?.priority || 3,
+      priority: ([1, 2, 3, 4] as const).includes(Number(body.priority) as any)
+        ? (Number(body.priority) as 1 | 2 | 3 | 4)
+        : existing?.priority || 3,
       important: Boolean(body.important ?? existing?.important),
       quadrant: body.quadrant ?? existing?.quadrant ?? null,
       due_date: body.due_date !== undefined ? body.due_date : existing?.due_date ?? null,

@@ -63,6 +63,16 @@ export interface FocusTimerState {
   completedFocusSession: boolean;
 }
 
+export type CustomizationPlanId = 'free' | 'monthly_99' | 'yearly_499' | 'lifetime_3999';
+
+export interface CustomizationConfig {
+  organizationName: string;
+  focusDurationMinutes: number;
+  breakDurationMinutes: number;
+  customSheetName: string;
+  customRequirements: string;
+}
+
 interface CadenceState {
   // Data
   tasks: Task[];
@@ -111,11 +121,19 @@ interface CadenceState {
   shakingColumn: TaskStatus | null;
   lastDragEndAt: number;
   activeModal: 'gmail' | 'drive' | 'shortcuts' | 'tasks_io' | null;
+  showLandingPage: boolean;
+  customizationPlan: CustomizationPlanId;
+  customizationConfig: CustomizationConfig;
 
   // Global Focus Timer
   focusTimer: FocusTimerState;
 
   // Actions
+  setShowLandingPage: (show: boolean) => void;
+  updateCustomizationPlan: (
+    plan: CustomizationPlanId,
+    config?: Partial<CustomizationConfig>
+  ) => void;
   setAuthUser: (user: {
     uid: string | null;
     email: string | null;
@@ -281,6 +299,15 @@ export const useCadenceStore = create<CadenceState>()(
       shakingColumn: null,
       lastDragEndAt: 0,
       activeModal: null,
+      showLandingPage: true,
+      customizationPlan: 'free',
+      customizationConfig: {
+        organizationName: '',
+        focusDurationMinutes: 25,
+        breakDurationMinutes: 5,
+        customSheetName: 'Cadence Master Tasks',
+        customRequirements: '',
+      },
 
       focusTimer: {
         taskId: null,
@@ -289,6 +316,20 @@ export const useCadenceStore = create<CadenceState>()(
         running: false,
         completedFocusSession: false,
       },
+
+      setShowLandingPage: (showLandingPage) => set({ showLandingPage }),
+
+      updateCustomizationPlan: (plan, config) =>
+        set((state) => {
+          const nextConfig = {
+            ...state.customizationConfig,
+            ...(config || {}),
+          };
+          return {
+            customizationPlan: plan,
+            customizationConfig: nextConfig,
+          };
+        }),
 
       setAuthUser: (user) =>
         set({
@@ -361,7 +402,7 @@ export const useCadenceStore = create<CadenceState>()(
           const next = order[(order.indexOf(s.workspace) + 1) % order.length];
           return { workspace: next };
         }),
-      setActiveView: (activeView) => set({ activeView }),
+      setActiveView: (activeView) => set({ activeView, showLandingPage: false }),
       setCalendarMode: (calendarMode) => set({ calendarMode }),
       setCalendarDate: (calendarDate) => set({ calendarDate }),
       setListGroupBy: (listGroupBy) => set({ listGroupBy }),
@@ -993,11 +1034,14 @@ export const useCadenceStore = create<CadenceState>()(
       },
 
       startFocusTimer: (taskId, mode = 'focus') => {
+        const cfg = get().customizationConfig;
+        const focusMins = cfg?.focusDurationMinutes || 25;
+        const breakMins = cfg?.breakDurationMinutes || 5;
         set({
           focusTimer: {
             taskId,
             mode,
-            secondsLeft: mode === 'focus' ? 25 * 60 : 5 * 60,
+            secondsLeft: mode === 'focus' ? focusMins * 60 : breakMins * 60,
             running: true,
             completedFocusSession: false,
           },
@@ -1097,6 +1141,8 @@ export const useCadenceStore = create<CadenceState>()(
         wipLimits: state.wipLimits,
         linkedSpreadsheetId: state.linkedSpreadsheetId,
         autoSyncSheets: state.autoSyncSheets,
+        customizationPlan: state.customizationPlan,
+        customizationConfig: state.customizationConfig,
       }),
     }
   )

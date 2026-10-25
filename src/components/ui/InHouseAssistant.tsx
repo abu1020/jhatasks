@@ -312,43 +312,123 @@ export function InHouseAssistant() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 12, scale: 0.98 }}
             transition={{ duration: 0.18 }}
-            className="fixed z-[69] right-3 bottom-[84px] sm:right-6 sm:bottom-24 w-[calc(100vw-1.5rem)] sm:w-[390px] h-[min(610px,calc(100dvh-7rem))] rounded-3xl border border-[var(--border-strong)] bg-[var(--surface-1)] shadow-2xl overflow-hidden flex flex-col"
+            className="fixed z-[69] right-3 bottom-[84px] sm:right-6 sm:bottom-24 w-[calc(100vw-1.5rem)] sm:w-[390px] h-[min(610px,calc(100dvh-7rem))] rounded-3xl border-2 border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0F172A] text-slate-900 dark:text-slate-100 shadow-[0_20px_60px_-10px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col"
           >
-            <header className="px-4 py-3.5 border-b border-[var(--border)] bg-[var(--surface-2)] flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)] flex items-center justify-center"><Bot className="w-5 h-5" /></div>
-              <div className="min-w-0 flex-1">
-                <div className="font-display text-sm font-bold text-[var(--text-1)]">Cadence Assistant</div>
-                <div className="text-[10px] text-[var(--text-3)] flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> In-house · no AI API key</div>
+            <header className="px-4 py-3.5 border-b border-slate-200 dark:border-slate-700/80 bg-slate-100 dark:bg-[#1E293B] flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center">
+                <Bot className="w-5 h-5" />
               </div>
-              <button type="button" onClick={() => setOpen(false)} aria-label="Minimize assistant" className="btn-ghost rounded-lg p-2"><Minus className="w-4 h-4" /></button>
-              <button type="button" onClick={() => { setMessages([makeMessage('assistant', 'Chat cleared. I’m ready to help—what would you like to do?')]); }} aria-label="Clear chat" className="btn-ghost rounded-lg p-2"><ChevronDown className="w-4 h-4" /></button>
+              <div className="min-w-0 flex-1">
+                <div className="font-display text-sm font-bold text-slate-900 dark:text-white">
+                  Cadence Assistant
+                </div>
+                <div className="text-[11px] text-slate-600 dark:text-slate-300 flex items-center gap-1.5 font-medium">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" /> In-house · No API key needed
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                aria-label="Minimize assistant"
+                className="btn-ghost rounded-lg p-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+              >
+                <Minus className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMessages([
+                    makeMessage('assistant', 'Chat cleared. I’m ready to help—what would you like to do?'),
+                  ]);
+                }}
+                aria-label="Clear chat"
+                className="btn-ghost rounded-lg p-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
+              >
+                <ChevronDown className="w-4 h-4" />
+              </button>
             </header>
 
-            <div ref={listRef} className="flex-1 overflow-y-auto p-4 space-y-3" aria-live="polite">
+            <div
+              ref={listRef}
+              className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-50 dark:bg-[#070B13]"
+              aria-live="polite"
+            >
               {messages.map((message) => (
-                <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[88%] rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed whitespace-pre-wrap ${message.role === 'user' ? 'bg-[var(--accent)] text-white rounded-br-md' : 'bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border)] rounded-bl-md'}`}>
-                    {message.role === 'assistant' && <Sparkles className="inline w-3.5 h-3.5 mr-1.5 text-[var(--accent)] -mt-0.5" />}{message.text}
+                <div
+                  key={message.id}
+                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`max-w-[88%] rounded-2xl px-4 py-3 text-[13px] leading-relaxed whitespace-pre-wrap ${
+                      message.role === 'user'
+                        ? 'bg-indigo-600 text-white font-medium rounded-br-sm shadow-sm'
+                        : 'bg-white dark:bg-[#1E293B] text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-700 rounded-bl-sm shadow-sm'
+                    }`}
+                  >
+                    {message.role === 'assistant' && (
+                      <Sparkles className="inline w-3.5 h-3.5 mr-1.5 text-indigo-500 -mt-0.5" />
+                    )}
+                    {message.text}
                   </div>
                 </div>
               ))}
-              {busy && <div className="text-xs text-[var(--text-3)] px-2 animate-pulse">Working in your workspace…</div>}
+              {busy && (
+                <div className="text-xs text-indigo-600 dark:text-indigo-400 font-medium px-2 animate-pulse">
+                  Working in your workspace…
+                </div>
+              )}
               {messages.length <= 1 && (
                 <div className="pt-2 space-y-2">
-                  <div className="text-[10px] uppercase tracking-wider text-[var(--text-3)] font-semibold">Try asking</div>
+                  <div className="text-[11px] uppercase tracking-wider text-slate-600 dark:text-slate-400 font-bold">
+                    Try asking
+                  </div>
                   <div className="flex flex-wrap gap-1.5">
-                    {quickPrompts.map((prompt) => <button type="button" key={prompt} onClick={() => void respond(prompt)} className="text-[10px] rounded-full border border-[var(--border)] bg-[var(--surface-1)] hover:bg-[var(--surface-3)] text-[var(--text-2)] px-2.5 py-1.5 transition">{prompt}</button>)}
+                    {quickPrompts.map((prompt) => (
+                      <button
+                        type="button"
+                        key={prompt}
+                        onClick={() => void respond(prompt)}
+                        className="text-[11px] font-medium rounded-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-[#1E293B] hover:bg-slate-100 dark:hover:bg-[#253248] text-slate-800 dark:text-slate-200 px-3 py-1.5 transition shadow-2xs"
+                      >
+                        {prompt}
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}
             </div>
 
-            <form onSubmit={(event) => { event.preventDefault(); void respond(draft); }} className="p-3 border-t border-[var(--border)] bg-[var(--surface-2)]">
-              <div className="flex items-center gap-2 rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-1)] p-1.5 pl-3 focus-within:ring-2 focus-within:ring-[var(--accent)]/30">
-                <input ref={inputRef} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ask me to do something…" aria-label="Message the assistant" className="min-w-0 flex-1 bg-transparent outline-none text-sm text-[var(--text-1)] placeholder:text-[var(--text-3)] py-2" />
-                <button type="submit" disabled={!draft.trim() || busy} aria-label="Send message" className="w-9 h-9 rounded-xl btn-accent flex items-center justify-center disabled:opacity-40"><Send className="w-4 h-4" /></button>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void respond(draft);
+              }}
+              className="p-3 border-t border-slate-200 dark:border-slate-700/80 bg-slate-100 dark:bg-[#131C2E]"
+            >
+              <div className="flex items-center gap-2 rounded-2xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#1E293B] p-1.5 pl-3 focus-within:ring-2 focus-within:ring-indigo-500/50 shadow-inner">
+                <input
+                  ref={inputRef}
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  placeholder="Ask me to do something…"
+                  aria-label="Message the assistant"
+                  className="min-w-0 flex-1 bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400 py-1.5"
+                />
+                <button
+                  type="submit"
+                  disabled={!draft.trim() || busy}
+                  aria-label="Send message"
+                  className="w-9 h-9 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center disabled:opacity-40 transition shrink-0"
+                >
+                  <Send className="w-4 h-4" />
+                </button>
               </div>
-              <div className="mt-2 px-1 text-[9px] text-[var(--text-3)] flex items-center justify-between"><span>Actions run directly in this app</span><span className="inline-flex items-center gap-1"><CornerDownLeft className="w-3 h-3" /> Enter to send</span></div>
+              <div className="mt-2 px-1 text-[10px] text-slate-600 dark:text-slate-400 flex items-center justify-between font-medium">
+                <span>Actions run directly in this app</span>
+                <span className="inline-flex items-center gap-1">
+                  <CornerDownLeft className="w-3 h-3" /> Enter to send
+                </span>
+              </div>
             </form>
           </motion.section>
         )}
