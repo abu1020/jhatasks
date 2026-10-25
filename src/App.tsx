@@ -11,6 +11,7 @@ import { TaskComposerModal } from './components/modals/TaskComposer';
 import { TaskDetailDrawer } from './components/modals/TaskDetailDrawer';
 import { EcosystemModals } from './components/modals/EcosystemModals';
 import { ParticleBurstOverlay, ToastViewport } from './components/ui/Primitives';
+import { InHouseAssistant } from './components/ui/InHouseAssistant';
 import { fetchFirestoreUserTasksAndEvents, initAuth } from './lib/firebase';
 import { useCadenceStore } from './store/useCadenceStore';
 import type { ViewId } from './db/schema';
@@ -188,6 +189,7 @@ export default function App() {
         <EcosystemModals />
         <ToastViewport />
         <ParticleBurstOverlay />
+        <InHouseAssistant />
       </div>
     </MotionConfig>
   );
