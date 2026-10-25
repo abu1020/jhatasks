@@ -1,0 +1,6 @@
+{
+  "name": "Cadence — Focus OS",
+  "description": "A calm, high-velocity Focus OS for seamless Personal and Office productivity with deep Google Ecosystem synergy.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

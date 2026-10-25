@@ -1,0 +1,148 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global safety net: deny all by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isVerified() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidTask(data) {
+      return data.keys().hasAll([
+        'id', 'ownerId', 'title', 'description', 'workspace', 'status',
+        'priority', 'important', 'tags', 'subtasks', 'attachments',
+        'actual_minutes', 'sort_order', 'source', 'created_at', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'ownerId', 'title', 'description', 'workspace', 'status',
+        'priority', 'important', 'quadrant', 'due_date', 'due_time',
+        'tags', 'subtasks', 'attachments', 'recurrence', 'estimated_minutes',
+        'actual_minutes', 'sort_order', 'source', 'created_at', 'completed_at',
+        'createdAt', 'updatedAt'
+      ]) &&
+      isValidId(data.id) &&
+      isValidId(data.ownerId) &&
+      data.ownerId == request.auth.uid &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 500 &&
+      data.description is string && data.description.size() <= 10000 &&
+      data.workspace is string && (data.workspace == 'office' || data.workspace == 'personal') &&
+      data.status is string && (data.status == 'todo' || data.status == 'in_progress' || data.status == 'in_review' || data.status == 'done') &&
+      data.priority is int && data.priority >= 1 && data.priority <= 4 &&
+      data.important is bool &&
+      (!('quadrant' in data) || data.quadrant == null || (data.quadrant is string && data.quadrant.size() <= 32)) &&
+      (!('due_date' in data) || data.due_date == null || (data.due_date is string && data.due_date.size() <= 32)) &&
+      (!('due_time' in data) || data.due_time == null || (data.due_time is string && data.due_time.size() <= 16)) &&
+      data.tags is list && data.tags.size() <= 20 && (data.tags.size() == 0 || data.tags[0] is string) &&
+      data.subtasks is list && data.subtasks.size() <= 50 && (data.subtasks.size() == 0 || data.subtasks[0] is map) &&
+      data.attachments is list && data.attachments.size() <= 20 && (data.attachments.size() == 0 || data.attachments[0] is map) &&
+      (!('recurrence' in data) || data.recurrence == null || (data.recurrence is string && data.recurrence.size() <= 32)) &&
+      (!('estimated_minutes' in data) || data.estimated_minutes == null || (data.estimated_minutes is int && data.estimated_minutes >= 0 && data.estimated_minutes <= 10080)) &&
+      data.actual_minutes is int && data.actual_minutes >= 0 && data.actual_minutes <= 100000 &&
+      (data.sort_order is int || data.sort_order is float) &&
+      data.source is string && (data.source == 'manual' || data.source == 'gmail' || data.source == 'google-tasks' || data.source == 'quick-add') &&
+      data.created_at is string && data.created_at.size() <= 64 &&
+      (!('completed_at' in data) || data.completed_at == null || (data.completed_at is string && data.completed_at.size() <= 64)) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidEvent(data) {
+      return data.keys().hasAll([
+        'id', 'ownerId', 'title', 'date', 'start_time', 'end_time', 'source', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'id', 'ownerId', 'title', 'date', 'start_time', 'end_time', 'source',
+        'color', 'meet_link', 'location', 'createdAt', 'updatedAt'
+      ]) &&
+      isValidId(data.id) &&
+      isValidId(data.ownerId) &&
+      data.ownerId == request.auth.uid &&
+      data.title is string && data.title.size() >= 1 && data.title.size() <= 300 &&
+      data.date is string && data.date.size() == 10 &&
+      data.start_time is string && data.start_time.size() == 5 &&
+      data.end_time is string && data.end_time.size() == 5 &&
+      data.source is string && data.source.size() <= 64 &&
+      (!('color' in data) || data.color == null || (data.color is string && data.color.size() <= 32)) &&
+      (!('meet_link' in data) || data.meet_link == null || (data.meet_link is string && data.meet_link.size() <= 500)) &&
+      (!('location' in data) || data.location == null || (data.location is string && data.location.size() <= 300)) &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    match /users/{userId}/tasks/{taskId} {
+      allow get: if isOwner(userId) && isValidId(userId) && isValidId(taskId) && existing().ownerId == request.auth.uid;
+      allow list: if isOwner(userId) && existing().ownerId == request.auth.uid;
+      allow create: if isOwner(userId) &&
+        isValidId(userId) &&
+        isValidId(taskId) &&
+        isValidTask(incoming()) &&
+        incoming().id == taskId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isOwner(userId) &&
+        isValidId(userId) &&
+        isValidId(taskId) &&
+        isValidTask(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().created_at == existing().created_at &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'description', 'workspace', 'status', 'priority', 'important',
+          'quadrant', 'due_date', 'due_time', 'tags', 'subtasks', 'attachments',
+          'recurrence', 'estimated_minutes', 'actual_minutes', 'sort_order',
+          'source', 'completed_at', 'updatedAt'
+        ]);
+      allow delete: if isOwner(userId) && isValidId(userId) && isValidId(taskId) && existing().ownerId == request.auth.uid;
+    }
+
+    match /users/{userId}/events/{eventId} {
+      allow get: if isOwner(userId) && isValidId(userId) && isValidId(eventId) && existing().ownerId == request.auth.uid;
+      allow list: if isOwner(userId) && existing().ownerId == request.auth.uid;
+      allow create: if isOwner(userId) &&
+        isValidId(userId) &&
+        isValidId(eventId) &&
+        isValidEvent(incoming()) &&
+        incoming().id == eventId &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isOwner(userId) &&
+        isValidId(userId) &&
+        isValidId(eventId) &&
+        isValidEvent(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'date', 'start_time', 'end_time', 'source',
+          'color', 'meet_link', 'location', 'updatedAt'
+        ]);
+      allow delete: if isOwner(userId) && isValidId(userId) && isValidId(eventId) && existing().ownerId == request.auth.uid;
+    }
+  }
+}

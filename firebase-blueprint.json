@@ -1,0 +1,238 @@
+{
+  "entities": {
+    "Task": {
+      "title": "Task",
+      "description": "A user task item in Cadence supporting office and personal workspaces, subtasks, attachments, recurrence, and time tracking.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the task.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the task owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Task title.",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "description": {
+          "type": "string",
+          "description": "Markdown notes and interactive checklist items.",
+          "maxLength": 10000
+        },
+        "workspace": {
+          "type": "string",
+          "description": "Workspace scope.",
+          "enum": ["office", "personal"]
+        },
+        "status": {
+          "type": "string",
+          "description": "Workflow status.",
+          "enum": ["todo", "in_progress", "in_review", "done"]
+        },
+        "priority": {
+          "type": "integer",
+          "description": "Priority level 1 (Urgent) to 4 (Low)."
+        },
+        "important": {
+          "type": "boolean",
+          "description": "Flag for important tasks."
+        },
+        "quadrant": {
+          "type": "string",
+          "description": "Explicit Eisenhower Matrix quadrant override or empty string when null.",
+          "maxLength": 32
+        },
+        "due_date": {
+          "type": "string",
+          "description": "Local due date YYYY-MM-DD or empty string.",
+          "maxLength": 32
+        },
+        "due_time": {
+          "type": "string",
+          "description": "24-hour time HH:MM or empty string.",
+          "maxLength": 16
+        },
+        "tags": {
+          "type": "array",
+          "description": "List of string tags (bounded up to 20)."
+        },
+        "subtasks": {
+          "type": "array",
+          "description": "List of subtask objects {id, title, done} (bounded up to 50)."
+        },
+        "attachments": {
+          "type": "array",
+          "description": "List of attachment objects {id, kind, name, url} (bounded up to 20)."
+        },
+        "recurrence": {
+          "type": "string",
+          "description": "Recurrence rule (daily, weekdays, weekly, monthly, or empty).",
+          "maxLength": 32
+        },
+        "estimated_minutes": {
+          "type": "integer",
+          "description": "Estimated duration in minutes."
+        },
+        "actual_minutes": {
+          "type": "integer",
+          "description": "Logged focus duration in minutes."
+        },
+        "sort_order": {
+          "type": "number",
+          "description": "Fractional double-precision sort order for Kanban and list ordering."
+        },
+        "source": {
+          "type": "string",
+          "description": "Origin of the task.",
+          "enum": ["manual", "gmail", "google-tasks", "quick-add"]
+        },
+        "created_at": {
+          "type": "string",
+          "description": "ISO creation timestamp string.",
+          "maxLength": 64
+        },
+        "completed_at": {
+          "type": "string",
+          "description": "ISO completion timestamp string or empty.",
+          "maxLength": 64
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last update."
+        }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "title",
+        "description",
+        "workspace",
+        "status",
+        "priority",
+        "important",
+        "tags",
+        "subtasks",
+        "attachments",
+        "actual_minutes",
+        "sort_order",
+        "source",
+        "created_at",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "CalendarEvent": {
+      "title": "CalendarEvent",
+      "description": "A synced or seeded calendar event associated with a user.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the event.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Firebase Auth UID of the event owner.",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "title": {
+          "type": "string",
+          "description": "Event title.",
+          "minLength": 1,
+          "maxLength": 300
+        },
+        "date": {
+          "type": "string",
+          "description": "Event date YYYY-MM-DD.",
+          "minLength": 10,
+          "maxLength": 10
+        },
+        "start_time": {
+          "type": "string",
+          "description": "Start time HH:MM.",
+          "minLength": 5,
+          "maxLength": 5
+        },
+        "end_time": {
+          "type": "string",
+          "description": "End time HH:MM.",
+          "minLength": 5,
+          "maxLength": 5
+        },
+        "source": {
+          "type": "string",
+          "description": "Event source.",
+          "maxLength": 64
+        },
+        "color": {
+          "type": "string",
+          "description": "Event hex color.",
+          "maxLength": 32
+        },
+        "meet_link": {
+          "type": "string",
+          "description": "Google Meet URL.",
+          "maxLength": 500
+        },
+        "location": {
+          "type": "string",
+          "description": "Event location.",
+          "maxLength": 300
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of update."
+        }
+      },
+      "required": [
+        "id",
+        "ownerId",
+        "title",
+        "date",
+        "start_time",
+        "end_time",
+        "source",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/tasks/{taskId}": {
+      "schema": { "$ref": "#/entities/Task" },
+      "description": "User-scoped tasks collection."
+    },
+    "/users/{userId}/events/{eventId}": {
+      "schema": { "$ref": "#/entities/CalendarEvent" },
+      "description": "User-scoped calendar events collection."
+    }
+  }
+}
