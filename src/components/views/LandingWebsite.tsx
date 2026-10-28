@@ -79,17 +79,18 @@ const CONTRAST_PRICING_TIERS: PrimaryContrastTier[] = [
   },
   {
     id: 'lifetime_3999',
-    tierOverline: 'Best Value · One-Time Payment',
+    tierOverline: 'Best Value · Save Over ₹7,881+ (66% Discount)',
     name: 'Lifetime Customization',
     priceDisplay: '₹3,999',
-    unitLabel: 'one-time',
-    subPriceNote: 'Pay once · Own unlimited bespoke customizations forever',
+    unitLabel: 'one-time lifetime',
+    subPriceNote: 'Save ₹7,881+ over 10 yrs vs monthly plans (₹11,880) · No renewals',
     summary:
-      'Unlimited lifetime bespoke UI components, custom Google Apps Script pipelines, and custom JSON/CSV schema importers built for your workflow.',
-    ctaLabel: 'Unlock ₹3,999 Lifetime Pass',
+      'Pay ₹3,999 once and save over ₹7,881+ compared to ongoing monthly passes. Own unlimited lifetime bespoke UI components, Google Apps Script pipelines, and custom importers forever with zero renewal fees.',
+    ctaLabel: 'Unlock ₹3,999 Lifetime Pass (Save ₹7,881+)',
     visualVariant: 'lifetime_signature',
     features: [
-      'Everything in Yearly Customization unlocked forever with zero renewals',
+      'Save over ₹7,881+ in 10 years compared to monthly subscriptions (66% discount)',
+      'Everything in Yearly Customization unlocked forever with zero renewal fees',
       'Unlimited lifetime bespoke UI & workflow customizations on request',
       'Custom Google Apps Script & automated Google Sheet pipelines',
       'Custom JSON, CSV & enterprise ERP task schema importers',
@@ -586,10 +587,10 @@ export function LandingWebsite() {
                 <div className="flex items-center flex-wrap gap-2 text-xs font-medium text-[var(--text-3)]">
                   <span>Focus OS</span>
                   <span aria-hidden="true">·</span>
-                  <span>Google Workspace Native</span>
+                  <span>Professional Version</span>
                   <span aria-hidden="true">·</span>
                   <span className="text-[#10B981] font-semibold">
-                    100% Free Core Platform
+                    Product Developed & Distributed by Jha Solutions
                   </span>
                 </div>
 
@@ -607,7 +608,8 @@ export function LandingWebsite() {
                   Cadence unifies your daily timeline, Kanban board, Eisenhower matrix,
                   Google Tasks v1 imports, bidirectional Sheets sync, and live Gmail OTP
                   toasts at <strong className="text-[var(--text-1)]">₹0 forever</strong>.
-                  Paid plans are strictly for tailored customization passes (₹99/mo, ₹499/yr, ₹3,999 lifetime).
+                  Product Developed & Distributed by <strong className="text-[var(--text-1)]">Jha Solutions</strong>.
+                  Paid passes are strictly for tailored customization passes (₹99/mo, ₹499/yr, <strong className="text-[var(--text-1)]">₹3,999 Lifetime — Save ₹7,881+</strong>).
                 </p>
               </div>
 
@@ -945,10 +947,10 @@ export function LandingWebsite() {
                 ₹3,999 Once
               </div>
               <div className="text-xs font-semibold text-[var(--text-2)]">
-                Lifetime Pass
+                Lifetime Pass (Save ₹7,881+)
               </div>
               <div className="text-[11px] text-[var(--text-3)]">
-                Unlimited bespoke UI & automations
+                Save 66%+ over 10 yrs vs monthly
               </div>
             </div>
           </div>
@@ -1483,9 +1485,13 @@ export function LandingWebsite() {
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-display font-bold text-[var(--text-1)]">Cadence</span>
             <span aria-hidden="true">·</span>
-            <span>Focus OS for Personal & Office</span>
+            <span>Focus OS Professional Release</span>
             <span aria-hidden="true">·</span>
-            <span>Free Forever (₹0) · Customizations ₹99/mo · ₹499/yr · ₹3,999 Lifetime</span>
+            <span>Free Forever (₹0) · Customizations ₹99/mo · ₹499/yr · ₹3,999 Lifetime (Save ₹7,881+)</span>
+            <span aria-hidden="true">·</span>
+            <span className="font-semibold text-[var(--text-1)]">
+              Product Developed & Distributed by Jha Solutions
+            </span>
           </div>
 
           <div className="flex items-center gap-4">

@@ -1265,6 +1265,15 @@ function SettingsPopover({
             <span>Backup All Data (JSON)</span>
           </span>
         </button>
+
+        <div className="pt-2 border-t border-[var(--border)] text-center space-y-0.5">
+          <p className="text-[10px] text-[var(--text-3)] font-medium">
+            Cadence Professional Release
+          </p>
+          <p className="text-[10px] text-[var(--text-2)] font-semibold">
+            Product Developed & Distributed by Jha Solutions
+          </p>
+        </div>
       </div>
     </div>,
     document.body
@@ -1613,6 +1622,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <Plus className="w-4 h-4" />
                   <span>New task</span>
                 </button>
+                <p className="text-[10px] text-[var(--text-3)] font-medium text-center pt-1 leading-tight">
+                  Product Developed & Distributed by<br />
+                  <span className="font-semibold text-[var(--text-2)]">Jha Solutions</span>
+                </p>
               </div>
             </motion.aside>
           </>
