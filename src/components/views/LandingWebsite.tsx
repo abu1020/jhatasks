@@ -21,6 +21,7 @@ import {
 } from '../../store/useCadenceStore';
 import { parseTaskInput } from '../../lib/nlpParser';
 import { googleSignIn, logout } from '../../lib/firebase';
+import { BrandLockup } from '../ui/Brand';
 import type { ViewId } from '../../db/schema';
 
 interface PrimaryContrastTier {
@@ -352,10 +353,10 @@ export function LandingWebsite() {
               e.preventDefault();
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className="font-display text-base sm:text-lg font-bold tracking-tight text-[var(--text-1)] whitespace-nowrap shrink-0 inline-flex items-center gap-1.5"
+            aria-label="Cadence home"
+            className="whitespace-nowrap shrink-0 rounded-xl transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
           >
-            <Sparkles className="w-4 h-4 text-[var(--accent)]" />
-            <span>Cadence</span>
+            <BrandLockup />
           </a>
 
           {/* Zone 2: 4 concise navigation links */}
@@ -1420,7 +1421,7 @@ export function LandingWebsite() {
       <footer className="border-t border-[var(--border)] py-6 mt-6">
         <div className="max-w-[1280px] mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[var(--text-3)]">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-display font-bold text-[var(--text-1)]">Cadence</span>
+            <BrandLockup compact />
             <span aria-hidden="true">·</span>
             <span>Focus OS Professional Release</span>
             <span aria-hidden="true">·</span>

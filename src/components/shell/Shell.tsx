@@ -54,6 +54,7 @@ import {
 import { parseGoogleTasksV1Json, type GmailNotificationItem } from '../../lib/nlpParser';
 import { useCadenceStore } from '../../store/useCadenceStore';
 import { ProgressRing } from '../ui/Primitives';
+import { BrandMark } from '../ui/Brand';
 
 export const VIEW_CONFIG: {
   id: ViewId;
@@ -1348,9 +1349,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             onClick={toggleNav}
             title="Cadence Navigation (B)"
             aria-label="Toggle navigation panel"
-            className="w-10 h-10 rounded-2xl btn-accent flex items-center justify-center font-display font-bold text-base shadow-sm"
+            className="rounded-[14px] transition-transform hover:scale-[1.04] active:scale-95"
           >
-            C
+            <BrandMark size={40} />
           </button>
 
           {/* Expand/collapse chevron */}

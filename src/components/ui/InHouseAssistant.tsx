@@ -1,10 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  Bot,
   ChevronDown,
   CornerDownLeft,
-  MessageCircle,
   Minus,
   Send,
   Sparkles,
@@ -13,7 +11,9 @@ import {
 import { PRIORITY_META, STATUS_META, type PriorityLevel, type Task, type TaskStatus, type ViewId } from '../../db/schema';
 import { formatHumanDate, getTodayStr } from '../../lib/dateUtils';
 import { parseTaskInput } from '../../lib/nlpParser';
+import { hasAmbiguousTaskMatch, matchTasksByTitle } from '../../lib/assistantUtils';
 import { useCadenceStore } from '../../store/useCadenceStore';
+import { BrandMark } from './Brand';
 
 type ChatMessage = { id: number; role: 'assistant' | 'user'; text: string };
 
@@ -30,22 +30,6 @@ const PRIORITIES: Record<string, PriorityLevel> = {
 };
 const cleanQuotes = (value: string) => value.trim().replace(/^['"“”]|['"“”]$/g, '').trim();
 const makeMessage = (role: ChatMessage['role'], text: string): ChatMessage => ({ id: Date.now() + Math.random(), role, text });
-
-function taskMatches(tasks: Task[], query: string): Task[] {
-  const normalized = cleanQuotes(query).toLowerCase().replace(/^(the task|task)\s+/i, '').trim();
-  if (!normalized) return [];
-  const words = normalized.split(/\s+/).filter(Boolean);
-  return tasks
-    .map((task) => {
-      const title = task.title.toLowerCase();
-      let score = title === normalized ? 100 : title.includes(normalized) ? 80 : 0;
-      if (!score) score = words.filter((word) => title.includes(word)).length * 10;
-      return { task, score };
-    })
-    .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score || a.task.title.localeCompare(b.task.title))
-    .map((item) => item.task);
-}
 
 function taskLabel(task: Task) {
   return `“${task.title}”`;
@@ -69,12 +53,26 @@ export function InHouseAssistant() {
     if (open) window.setTimeout(() => inputRef.current?.focus(), 80);
   }, [open]);
 
-  const addAssistant = (text: string) => setMessages((current) => [...current, makeMessage('assistant', text)]);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.altKey && event.shiftKey && event.key.toLowerCase() === 'a') {
+        event.preventDefault();
+        setOpen((value) => !value);
+      } else if (event.key === 'Escape' && open) {
+        setOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open]);
+
+  const addAssistant = (text: string) =>
+    setMessages((current) => [...current, makeMessage('assistant', text)].slice(-80));
 
   const respond = async (raw: string) => {
     const input = raw.trim();
     if (!input || busy) return;
-    setMessages((current) => [...current, makeMessage('user', input)]);
+    setMessages((current) => [...current, makeMessage('user', input)].slice(-80));
     setDraft('');
     setBusy(true);
     try {
@@ -96,10 +94,48 @@ export function InHouseAssistant() {
 
     if (/^(hi|hello|hey|good morning|good afternoon)\b/.test(lower)) return 'Hello! What would you like to get done? Try “add task prepare launch brief tomorrow !high” or “show my urgent tasks”.';
     if (/^(help|what can you do|commands|capabilities)(\s|$)/.test(lower)) {
-      return 'I can create tasks from plain language; find, open, complete, reopen, rename, reprioritize, reschedule, move, duplicate, or delete tasks (with Undo); show task lists and summaries; switch views/workspaces/themes; search or clear filters; plan your day; and control the focus timer. I can also open Settings, shortcuts, Gmail, Drive, and data import/export panels. Google/Gmail/Drive actions still require their normal sign-in and permissions.';
+      return 'I can work with your tasks and app controls: create, find, open, rename, reprioritize, reschedule, change status/workspace, add notes or subtasks, complete, reopen, duplicate, and delete (with Undo); search and summarize work; plan your day; navigate all six views; change calendar mode, theme, workspace, sorting, and filters; and start, pause, resume, or stop focus sessions. I can also open Settings, shortcuts, Gmail, Drive, and task import/export. Examples: “add task send the brief tomorrow !high”, “add subtask to launch plan: review copy”, “move report to Friday”, “show calendar week”, or “go to insights”. Google/Gmail/Drive still require their usual permissions. I run locally with clear command matching, not a cloud AI model.';
     }
 
-    const viewRequest = lower.match(/\b(?:go to|open|show|switch to)\s+(my day|today|board|kanban|list|calendar|matrix|eisenhower|insights|analytics)(?:\s+view)?\b/);
+    if (/\b(?:open|show) (?:the )?(?:command palette|quick actions)\b/.test(lower)) {
+      state.setCommandPaletteOpen(true);
+      return 'Opened the command palette. Use it to jump to views and quick actions.';
+    }
+
+    const calendarModeRequest = lower.match(/\b(?:show|open|switch to)\s+(day|week|month)(?:ly)?\s+(?:calendar|calendar view)\b/);
+    if (calendarModeRequest) {
+      state.setCalendarMode(calendarModeRequest[1] as 'day' | 'week' | 'month');
+      state.setActiveView('calendar');
+      return `Opened the ${calendarModeRequest[1]} calendar.`;
+    }
+
+    if (/\b(?:show|hide) completed tasks\b/.test(lower)) {
+      const show = /\bshow\b/.test(lower);
+      state.setShowCompleted(show);
+      return `${show ? 'Showing' : 'Hiding'} completed tasks.`;
+    }
+
+    const sortRequest = lower.match(/\bsort (?:my )?(?:tasks|list) by (priority|due date|title|newest)\b/);
+    if (sortRequest) {
+      const sort = sortRequest[1].replace(' ', '_') as 'priority' | 'due_date' | 'title' | 'newest';
+      state.setListSortBy(sort);
+      state.setActiveView('list');
+      return `Sorted the task list by ${sortRequest[1]}.`;
+    }
+
+    const groupRequest = lower.match(/\bgroup (?:my )?(?:tasks|list) by (priority|due date|status)\b/);
+    if (groupRequest) {
+      state.setListGroupBy(groupRequest[1].replace(' ', '_') as 'priority' | 'due_date' | 'status');
+      state.setActiveView('list');
+      return `Grouped the task list by ${groupRequest[1]}.`;
+    }
+
+    if (/\b(?:open|show) (?:the )?task composer\b/.test(lower)) {
+      state.openComposer();
+      return 'Opened the task composer. Add your details and save when ready.';
+    }
+
+    const viewRequest = lower.match(/\b(?:go to|open|show|switch to|take me to|navigate to)\s+(my day|today|board|kanban|list|calendar|matrix|eisenhower|insights|analytics)(?:\s+view)?\b/);
     if (viewRequest) {
       const key = viewRequest[1];
       state.setActiveView(VIEWS[key]);
@@ -167,6 +203,59 @@ export function InHouseAssistant() {
       return `Created ${taskLabel(task)}${task.due_date ? `, due ${formatHumanDate(task.due_date, getTodayStr())}` : ''}${task.priority <= 2 ? `, ${PRIORITY_META[task.priority].label.toLowerCase()} priority` : ''}.`;
     }
 
+    const addSubtask = input.match(/^(?:please\s+)?add\s+(?:a\s+)?subtask\s+to\s+(?:the\s+)?(?:task\s+)?(.+?)(?:\s*:\s*|\s+called\s+)(.+)$/i);
+    if (addSubtask) {
+      const parentQuery = cleanQuotes(addSubtask[1]);
+      const possibleParents = matchTasksByTitle(state.tasks, parentQuery);
+      if (!possibleParents.length) return `I couldn’t find a parent task matching “${parentQuery}”.`;
+      if (hasAmbiguousTaskMatch(possibleParents, parentQuery)) {
+        return `I found several possible parent tasks: ${possibleParents.slice(0, 4).map((task) => task.title).join('; ')}. Please use a more specific title.`;
+      }
+      const parent = possibleParents[0];
+      const title = cleanQuotes(addSubtask[2]);
+      if (!title) return 'Please include a title for the subtask.';
+      const subtask = { id: `sub_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`, title, done: false };
+      state.patchTask(parent.id, { subtasks: [...parent.subtasks, subtask] });
+      state.setSelectedTaskId(parent.id);
+      return `Added “${title}” as a subtask of ${taskLabel(parent)}.`;
+    }
+
+    const addNote = input.match(/^(?:please\s+)?add\s+(?:a\s+)?note\s+to\s+(?:the\s+)?(?:task\s+)?(.+?)\s*:\s*(.+)$/i);
+    if (addNote) {
+      const query = cleanQuotes(addNote[1]);
+      const matches = matchTasksByTitle(state.tasks, query);
+      if (!matches.length) return `I couldn’t find a task matching “${query}”.`;
+      if (hasAmbiguousTaskMatch(matches, query)) {
+        return `I found several possible tasks: ${matches.slice(0, 4).map((task) => task.title).join('; ')}. Please be more specific.`;
+      }
+      const task = matches[0];
+      const note = cleanQuotes(addNote[2]);
+      const description = task.description.trim();
+      state.patchTask(task.id, { description: description ? `${description}\n${note}` : note });
+      return `Added a note to ${taskLabel(task)}.`;
+    }
+
+    const completeSubtask = input.match(/^(?:please\s+)?(?:complete|finish|check off|mark done)\s+(?:the\s+)?subtask\s+(.+?)\s+(?:in|on|under)\s+(?:the\s+)?(?:task\s+)?(.+)$/i);
+    if (completeSubtask) {
+      const subtaskQuery = cleanQuotes(completeSubtask[1]);
+      const parentQuery = cleanQuotes(completeSubtask[2]);
+      const parentMatches = matchTasksByTitle(state.tasks, parentQuery);
+      if (!parentMatches.length) return `I couldn’t find a parent task matching “${parentQuery}”.`;
+      if (hasAmbiguousTaskMatch(parentMatches, parentQuery)) {
+        return `I found several possible parent tasks: ${parentMatches.slice(0, 4).map((task) => task.title).join('; ')}. Please be more specific.`;
+      }
+      const parent = parentMatches[0];
+      const subtaskMatches = parent.subtasks.filter((item) => item.title.toLowerCase() === subtaskQuery.toLowerCase() || item.title.toLowerCase().includes(subtaskQuery.toLowerCase()));
+      if (!subtaskMatches.length) return `I couldn’t find a subtask matching “${subtaskQuery}” in ${taskLabel(parent)}.`;
+      if (subtaskMatches.length > 1 && subtaskMatches[0].title.toLowerCase() !== subtaskQuery.toLowerCase()) {
+        return 'I found several matching subtasks. Please use the full subtask title.';
+      }
+      const target = subtaskMatches[0];
+      if (target.done) return `“${target.title}” is already complete.`;
+      state.patchTask(parent.id, { subtasks: parent.subtasks.map((item) => item.id === target.id ? { ...item, done: true } : item) });
+      return `Completed subtask “${target.title}” in ${taskLabel(parent)}.`;
+    }
+
     if (/\b(?:how many|summary|summarize|status report|what(?:'s| is) on my plate|what should i work on)\b/.test(lower)) {
       const today = getTodayStr();
       const overdue = openTasks.filter((task) => task.due_date && task.due_date < today);
@@ -177,7 +266,7 @@ export function InHouseAssistant() {
       return `You have ${openTasks.length} open task${openTasks.length === 1 ? '' : 's'} and ${completed} completed. ${overdue.length} overdue, ${dueToday.length} due today, ${urgent.length} urgent.${suggested ? ` Suggested next: ${taskLabel(suggested)}.` : ''}`;
     }
 
-    const taskListRequest = lower.match(/\b(?:show|list|what are)\s+(?:all\s+)?(?:my\s+)?(?:(urgent|overdue|completed|done|today)\s+)?(?:tasks|to dos)\b/);
+    const taskListRequest = lower.match(/\b(?:show|list|what are)\s+(?:all\s+)?(?:my\s+)?(?:(urgent|overdue|completed|done|today|open)\s+)?(?:tasks|to dos)\b/);
     if (taskListRequest) {
       const filter = taskListRequest[1];
       const list = filter === 'completed' || filter === 'done'
@@ -197,7 +286,7 @@ export function InHouseAssistant() {
     const timerStart = lower.match(/\b(?:start|begin) (?:a )?(?:focus )?(?:timer|session)(?:\s+(?:for|on)\s+(.+))?/);
     if (timerStart) {
       const query = timerStart[1] || '';
-      const target = query ? taskMatches(openTasks, query)[0] : [...openTasks].sort((a, b) => a.priority - b.priority)[0];
+      const target = query ? matchTasksByTitle(openTasks, query)[0] : [...openTasks].sort((a, b) => a.priority - b.priority)[0];
       if (!target) return 'I couldn’t find an open task to focus on. Tell me the task title or create one first.';
       state.startFocusTimer(target.id);
       return `Focus session started for ${taskLabel(target)}.`;
@@ -230,9 +319,9 @@ export function InHouseAssistant() {
       const match = input.match(operation.regex);
       if (!match) continue;
       const query = cleanQuotes(match[1]);
-      const matches = taskMatches(state.tasks, query);
+      const matches = matchTasksByTitle(state.tasks, query);
       if (!matches.length) return `I couldn’t find a task matching “${query}”. Try a few words from its title.`;
-      if (matches.length > 1 && matches[0].title.toLowerCase() !== matches[1].title.toLowerCase() && matches[0].title.toLowerCase() !== query.toLowerCase()) {
+      if (hasAmbiguousTaskMatch(matches, query)) {
         return `I found a few possible matches: ${matches.slice(0, 4).map((task) => task.title).join('; ')}. Please be more specific.`;
       }
       const task = matches[0];
@@ -288,18 +377,18 @@ export function InHouseAssistant() {
     return 'I didn’t recognize that request. Try “help” to see what I can do. You can ask me to add a task, complete a task, switch to Calendar, plan my day, or start a focus timer.';
   };
 
-  const quickPrompts = ['Add task: prepare weekly plan tomorrow', 'Show my urgent tasks', 'Plan my day', 'Help'];
+  const quickPrompts = ['Add task: prepare weekly plan tomorrow', 'Show my urgent tasks', 'Navigate to Calendar', 'Plan my day', 'Help'];
 
   return (
     <>
       <button
         type="button"
-        aria-label={open ? 'Close in-house assistant' : 'Open in-house assistant'}
-        title="In-house assistant"
+        aria-label={open ? 'Close Cadence Assistant' : 'Open Cadence Assistant'}
+        title="Chat with Cadence Assistant · Alt+Shift+A"
         onClick={() => setOpen((value) => !value)}
-        className="fixed z-[70] bottom-5 right-5 sm:bottom-6 sm:right-6 w-14 h-14 rounded-full btn-accent shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
+        className="fixed z-[70] bottom-5 right-5 sm:bottom-6 sm:right-6 w-14 h-14 rounded-full bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-700 shadow-xl flex items-center justify-center hover:scale-105 active:scale-95 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
       >
-        {open ? <X className="w-5 h-5" /> : <MessageCircle className="w-6 h-6" />}
+        {open ? <X className="w-5 h-5 text-indigo-600 dark:text-indigo-300" /> : <BrandMark size={42} />}
         {!open && <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 border-2 border-[var(--bg)]" />}
       </button>
 
@@ -315,15 +404,13 @@ export function InHouseAssistant() {
             className="fixed z-[69] right-3 bottom-[84px] sm:right-6 sm:bottom-24 w-[calc(100vw-1.5rem)] sm:w-[390px] h-[min(610px,calc(100dvh-7rem))] rounded-3xl border-2 border-slate-300 dark:border-slate-700 bg-white dark:bg-[#0F172A] text-slate-900 dark:text-slate-100 shadow-[0_20px_60px_-10px_rgba(0,0,0,0.5)] overflow-hidden flex flex-col"
           >
             <header className="px-4 py-3.5 border-b border-slate-200 dark:border-slate-700/80 bg-slate-100 dark:bg-[#1E293B] flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center">
-                <Bot className="w-5 h-5" />
-              </div>
+              <BrandMark size={40} />
               <div className="min-w-0 flex-1">
                 <div className="font-display text-sm font-bold text-slate-900 dark:text-white">
                   Cadence Assistant
                 </div>
                 <div className="text-[11px] text-slate-600 dark:text-slate-300 flex items-center gap-1.5 font-medium">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" /> In-house · No API key needed
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" /> Built-in · 6 views + task actions
                 </div>
               </div>
               <button
@@ -410,8 +497,10 @@ export function InHouseAssistant() {
                   ref={inputRef}
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
-                  placeholder="Ask me to do something…"
+                  placeholder="Navigate, manage a task, or ask for help…"
                   aria-label="Message the assistant"
+                  maxLength={1000}
+                  autoComplete="off"
                   className="min-w-0 flex-1 bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400 py-1.5"
                 />
                 <button
