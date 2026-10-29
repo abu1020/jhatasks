@@ -16,7 +16,7 @@ import {
   deriveQuadrant,
   layoutCollisionClusters,
 } from './dateUtils';
-import type { Task } from '../db/schema';
+import { isSafeExternalUrl, type Task } from '../db/schema';
 
 function makeTask(overrides: Partial<Task> = {}): Task {
   return {
@@ -267,3 +267,12 @@ test('tasksToCsv and sheetRowsToTasks round-trip tasks cleanly for Google Sheets
   assert.equal(restored[0].due_time, '11:00');
 });
 
+
+test('external links allow only bounded HTTP(S) URLs', () => {
+  assert.equal(isSafeExternalUrl('https://docs.google.com/document/d/example'), true);
+  assert.equal(isSafeExternalUrl('http://example.org/resource'), true);
+  assert.equal(isSafeExternalUrl('javascript:alert(1)'), false);
+  assert.equal(isSafeExternalUrl('data:text/html,<script>alert(1)</script>'), false);
+  assert.equal(isSafeExternalUrl('not a URL'), false);
+  assert.equal(isSafeExternalUrl(`https://example.org/${'a'.repeat(2048)}`), false);
+});

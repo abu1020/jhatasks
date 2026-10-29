@@ -10,6 +10,16 @@ export type TaskSource = 'manual' | 'gmail' | 'google-tasks' | 'quick-add';
 export type ViewId = 'my_day' | 'board' | 'list' | 'calendar' | 'matrix' | 'insights';
 export type CalendarMode = 'month' | 'week' | 'day';
 
+export function isSafeExternalUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length > 2048) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:';
+  } catch {
+    return false;
+  }
+}
+
 export interface Subtask {
   id: string;
   title: string;

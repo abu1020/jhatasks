@@ -1252,19 +1252,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const settingsBtnRef = useRef<HTMLButtonElement | null>(null);
   const notifBtnRef = useRef<HTMLButtonElement | null>(null);
 
-  // Hydrate cached real Gmail notifications for the signed-in user from backend on mount
-  useEffect(() => {
-    if (!userEmail) return;
-    fetch(`/api/gmail/notifications?email=${encodeURIComponent(userEmail)}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data && Array.isArray(data.messages) && data.messages.length > 0) {
-          ingestGmailNotifications(data.messages);
-        }
-      })
-      .catch(() => {});
-  }, [userEmail, ingestGmailNotifications]);
-
+  // Mail contents, including OTPs, stay client-side; the API deliberately does not cache them.
   // Real-time Gmail polling loop every 15s + on window focus/visibility when signed in with Google OAuth token
   useEffect(() => {
     if (!hasGoogleToken) return;

@@ -12,7 +12,7 @@ import {
   Video,
   Wand2,
 } from 'lucide-react';
-import type { CalendarEvent, Task } from '../../db/schema';
+import { isSafeExternalUrl, type CalendarEvent, type Task } from '../../db/schema';
 import {
   computeStreakDays,
   computeTodayProgress,
@@ -299,11 +299,11 @@ export function MyDayView() {
                           </div>
                         </div>
 
-                        {ev.meet_link && (
+                        {isSafeExternalUrl(ev.meet_link) && (
                           <a
                             href={ev.meet_link}
                             target="_blank"
-                            rel="noreferrer"
+                            rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
                             className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-[#4F46E5]/12 text-[var(--accent)] hover:bg-[#4F46E5]/20 inline-flex items-center gap-1.5 shrink-0"
                           >

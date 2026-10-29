@@ -173,9 +173,9 @@ export const googleSignIn = async (): Promise<SignInResult> => {
 
     const enhancedErr: any = new Error(
       isUnauthorizedDomain
-        ? 'Preview domain is not yet whitelisted in Firebase Console OAuth settings. Use Quick Sign In below to continue without interruption.'
+        ? 'Preview domain is not authorized for Google OAuth. Add it to Firebase authorized domains to sign in.'
         : isPopupBlocked
-        ? 'Browser blocked the Google sign-in popup. Enable popups or use Quick Sign In.'
+        ? 'Browser blocked the Google sign-in popup. Enable popups to authenticate.'
         : message.includes('closed')
         ? 'Google sign-in popup was closed before completion.'
         : `Google sign-in error: ${message}`
@@ -791,7 +791,8 @@ export async function pullTasksFromGoogleSheet(
   }
 
   const proxyRes = await fetch(
-    `/api/sheets/sync?spreadsheetId=${encodeURIComponent(sheetId)}`
+    `/api/sheets/sync?spreadsheetId=${encodeURIComponent(sheetId)}`,
+    { headers: auth.currentUser ? { 'X-Cadence-User': auth.currentUser.uid } : {} }
   );
   if (!proxyRes.ok) {
     throw new Error('Could not read Google Sheet');

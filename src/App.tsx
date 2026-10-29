@@ -61,8 +61,10 @@ export default function App() {
           photo: user.photoURL,
           hasToken: Boolean(token),
         });
+        void store.hydrateFromApi();
         try {
           const cloud = await fetchFirestoreUserTasksAndEvents(user.uid);
+          if (useCadenceStore.getState().userUid !== user.uid) return;
           if (cloud.tasks.length > 0) store.mergeExternalTasks(cloud.tasks);
           if (cloud.events.length > 0) store.mergeExternalEvents(cloud.events);
         } catch {

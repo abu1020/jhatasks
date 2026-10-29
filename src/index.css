@@ -19,7 +19,7 @@
   --text-1: #0F172A;
   --text-2: #334155;
   --text-3: #64748B;
-  --text-4: #94A3B8;
+  --text-4: #64748B;
   --overlay: rgba(15, 23, 42, 0.42);
 
   /* Default Unified / All workspace accent */
@@ -49,7 +49,7 @@
   --text-1: #F1F5F9;
   --text-2: #CBD5E1;
   --text-3: #94A3B8;
-  --text-4: #64748B;
+  --text-4: #94A3B8;
   --overlay: rgba(2, 6, 14, 0.62);
 
   --accent: #818CF8;
@@ -203,6 +203,11 @@
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
+:where(button, a, [role='button'], input, select, textarea):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .kbd {
   display: inline-flex;
   align-items: center;
@@ -271,6 +276,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
   .skeleton,
   .animate-shake {
     animation: none !important;
