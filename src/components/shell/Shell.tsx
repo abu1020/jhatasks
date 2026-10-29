@@ -8,6 +8,7 @@ import {
   Calendar as CalendarIcon,
   Check,
   CheckCheck,
+  CheckSquare,
   ChevronLeft,
   ChevronRight,
   Command,
@@ -1243,6 +1244,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const userName = useCadenceStore((s) => s.userName);
   const userEmail = useCadenceStore((s) => s.userEmail);
   const setShowLandingPage = useCadenceStore((s) => s.setShowLandingPage);
+  const setActiveModal = useCadenceStore((s) => s.setActiveModal);
 
   const setGmailPollStatus = useCadenceStore((s) => s.setGmailPollStatus);
   const setAuthUser = useCadenceStore((s) => s.setAuthUser);
@@ -1657,8 +1659,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </span>
           </button>
 
-          {/* Notifications + Theme toggle + settings icon grouped in ONE segmented container */}
+          {/* Notifications + Google Tasks + Gmail + Theme toggle + settings icon grouped in ONE segmented container */}
           <div className="inline-flex items-center p-0.5 rounded-xl bg-[var(--surface-1)] border border-[var(--border)] shrink-0">
+            <button
+              type="button"
+              onClick={() => setActiveModal('tasks_io')}
+              title="Fetch Google Tasks & Sheets"
+              aria-label="Fetch Google Tasks and Sheets Hub"
+              className="p-1.5 sm:p-2 rounded-lg text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] min-w-[34px] min-h-[34px] sm:min-w-[36px] sm:min-h-[36px] inline-flex items-center justify-center transition"
+            >
+              <CheckSquare className="w-4 h-4 text-[#10B981]" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveModal('gmail')}
+              title="Fetch Gmail Inbox & Messages"
+              aria-label="Fetch Gmail Inbox and Messages"
+              className="p-1.5 sm:p-2 rounded-lg text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] min-w-[34px] min-h-[34px] sm:min-w-[36px] sm:min-h-[36px] inline-flex items-center justify-center transition"
+            >
+              <Mail className="w-4 h-4 text-[#EA4335]" />
+            </button>
             <button
               ref={notifBtnRef}
               type="button"

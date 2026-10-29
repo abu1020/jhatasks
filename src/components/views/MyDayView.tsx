@@ -30,6 +30,7 @@ import {
   TagChip,
   WorkspaceDot,
 } from '../ui/Primitives';
+import { EcosystemSyncToolbar } from '../ui/EcosystemSyncToolbar';
 
 type TimelineEntry =
   | { kind: 'event'; time: string; sortMin: number; event: CalendarEvent }
@@ -212,6 +213,9 @@ export function MyDayView() {
           </button>
         </div>
       </section>
+
+      {/* Google Tasks & Gmail Live Sync Toolbar */}
+      <EcosystemSyncToolbar />
 
       {/* First-Run Empty State when user has 0 tasks */}
       {scopedTasks.length === 0 && (
