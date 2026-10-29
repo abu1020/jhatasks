@@ -173,9 +173,9 @@ export const googleSignIn = async (): Promise<SignInResult> => {
 
     const enhancedErr: any = new Error(
       isUnauthorizedDomain
-        ? 'Preview domain is not yet whitelisted in Firebase Console OAuth settings. Use Quick Sign In below to continue without interruption.'
+        ? 'Preview domain is not authorized for Google OAuth. Configure Firebase authorized domains or continue as a guest.'
         : isPopupBlocked
-        ? 'Browser blocked the Google sign-in popup. Enable popups or use Quick Sign In.'
+        ? 'Browser blocked the Google sign-in popup. Enable popups or continue as a guest.'
         : message.includes('closed')
         ? 'Google sign-in popup was closed before completion.'
         : `Google sign-in error: ${message}`
@@ -189,33 +189,17 @@ export const googleSignIn = async (): Promise<SignInResult> => {
   }
 };
 
-/**
- * Direct Email Sign In
- * Allows any user to authenticate with their email address without restrictions.
- */
-export const emailSignIn = (
-  email: string,
-  displayName?: string
-): SignInResult => {
-  const cleanEmail = (email || '').trim().toLowerCase();
-  const name = displayName?.trim() || cleanEmail.split('@')[0] || 'User';
-  const safeSeed = encodeURIComponent(name);
-  return {
-    user: {
-      uid: 'user_' + btoa(cleanEmail || 'anonymous').replace(/[^a-zA-Z0-9]/g, '').slice(0, 24),
-      email: cleanEmail,
-      displayName: name,
-      photoURL: `https://api.dicebear.com/7.x/initials/svg?seed=${safeSeed}&backgroundColor=4f46e5&textColor=ffffff`,
-    },
-    accessToken: null,
-    isLocalFallback: true,
-  };
-};
-
-export const quickLocalSignIn = (
-  email = 'user@example.com',
-  displayName = 'User'
-): SignInResult => emailSignIn(email, displayName);
+// Guest mode is intentionally anonymous and is not represented as an authenticated account.
+export const guestSignIn = (displayName = 'Guest'): SignInResult => ({
+  user: {
+    uid: `guest_${crypto.randomUUID()}`,
+    email: null,
+    displayName: displayName.trim().slice(0, 80) || 'Guest',
+    photoURL: null,
+  },
+  accessToken: null,
+  isLocalFallback: true,
+});
 
 export const getAccessToken = (): string | null => cachedAccessToken;
 

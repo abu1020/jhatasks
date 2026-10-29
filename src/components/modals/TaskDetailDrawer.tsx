@@ -25,6 +25,7 @@ import {
 import {
   PRIORITY_META,
   STATUS_META,
+  isSafeExternalUrl,
   type Attachment,
   type PriorityLevel,
   type RecurrenceType,
@@ -712,9 +713,9 @@ function TaskDetailBody({
                   className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-[var(--surface-1)] border border-[var(--border)] text-xs"
                 >
                   <a
-                    href={att.url}
-                    target="_blank"
-                    rel="noreferrer"
+                    href={isSafeExternalUrl(att.url) ? att.url : undefined}
+                    target={isSafeExternalUrl(att.url) ? '_blank' : undefined}
+                    rel="noopener noreferrer"
                     className="inline-flex items-center gap-2 font-medium text-[var(--text-1)] hover:text-[var(--accent)] truncate"
                   >
                     <AttachmentIcon kind={att.kind} />

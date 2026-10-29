@@ -15,19 +15,17 @@ Cadence is a calm, high-velocity Focus OS for seamless **Personal** and **Office
 ## Setup & Commands
 
 ```bash
-# Install dependencies
-npm install
+# Install dependencies from the lockfile
+npm ci
 
-# Push Drizzle PostgreSQL schema (when DATABASE_URL is configured)
+# Push Drizzle PostgreSQL schema (requires DATABASE_URL to be configured)
 npx drizzle-kit push --config=src/db/drizzle.config.ts
 
-# Type-check & lint
+# Type-check, lint Firestore rules, and run tests/security audit
 npm run lint
 npx eslint firestore.rules
-
-# Run unit tests
-npx --yes tsx --test src/lib/nlpParser.test.ts
-npx --yes tsx --test firestore.rules.test.ts
+npm test
+npm run security
 
 # Start development server (Express + Vite on port 3000)
 npm run dev
@@ -35,3 +33,11 @@ npm run dev
 # Build for production
 npm run build
 ```
+
+## Data & Security Notes
+
+- Google sign-in is the authenticated account flow. The email-only lookalike login was removed; guest mode is clearly anonymous and does not sync to Firestore.
+- Guest API data is isolated by a random `HttpOnly`, `SameSite=Lax` browser-session cookie and held in bounded in-memory stores. It is temporary and is lost on server restart or session eviction; it is not a durable database or an authentication boundary.
+- Gmail access tokens are accepted only in the `Authorization: Bearer` header. Gmail message contents and OTPs are returned to the requesting browser and are never cached server-side.
+- Firestore access remains governed by `firestore.rules`. Deploy and validate these rules in the Firebase project before relying on cloud storage; the repository's rules test is a lightweight model/static check, not a Firestore Emulator test.
+- Configure `DATABASE_URL` explicitly before running Drizzle commands. Never place a development or production database URL in source control.

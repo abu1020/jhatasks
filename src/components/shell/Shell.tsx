@@ -49,8 +49,7 @@ import {
   fetchGoogleTasksLive,
   googleSignIn,
   logout,
-  emailSignIn,
-  quickLocalSignIn,
+  guestSignIn,
 } from '../../lib/firebase';
 import { parseGoogleTasksV1Json, type GmailNotificationItem } from '../../lib/nlpParser';
 import { useCadenceStore } from '../../store/useCadenceStore';
@@ -73,11 +72,11 @@ export const VIEW_CONFIG: {
 
 export function GoogleSignInButton({
   compact = false,
-  showEmailOption = true,
+  showGuestOption = true,
   onSuccess,
 }: {
   compact?: boolean;
-  showEmailOption?: boolean;
+  showGuestOption?: boolean;
   onSuccess?: () => void;
 }) {
   const setAuthUser = useCadenceStore((s) => s.setAuthUser);
@@ -89,13 +88,11 @@ export function GoogleSignInButton({
   const addToast = useCadenceStore((s) => s.addToast);
   const [busy, setBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [showEmailForm, setShowEmailForm] = useState(false);
-  const [emailInput, setEmailInput] = useState('');
-  const [nameInput, setNameInput] = useState('');
 
   const applyAuthResult = (res: {
     user: { uid: string; email: string | null; displayName: string | null; photoURL: string | null };
     accessToken: string | null;
+    isLocalFallback?: boolean;
   }) => {
     setAuthUser({
       uid: res.user.uid,
@@ -109,7 +106,9 @@ export function GoogleSignInButton({
     setActiveView('my_day');
 
     addToast({
-      message: `Signed in as ${res.user.displayName || res.user.email}. Full software access unlocked!`,
+      message: res.isLocalFallback
+        ? 'Guest workspace opened. Changes stay in this browser session.'
+        : `Signed in as ${res.user.displayName || res.user.email}. Full software access unlocked!`,
       tone: 'success',
     });
     if (res.accessToken && res.user.email) {
@@ -119,12 +118,14 @@ export function GoogleSignInButton({
         })
         .catch(() => {});
     }
-    fetchFirestoreUserTasksAndEvents(res.user.uid)
-      .then((cloudData) => {
-        if (cloudData.tasks.length > 0) mergeExternalTasks(cloudData.tasks);
-        if (cloudData.events.length > 0) mergeExternalEvents(cloudData.events);
-      })
-      .catch(() => {});
+    if (!res.isLocalFallback) {
+      fetchFirestoreUserTasksAndEvents(res.user.uid)
+        .then((cloudData) => {
+          if (cloudData.tasks.length > 0) mergeExternalTasks(cloudData.tasks);
+          if (cloudData.events.length > 0) mergeExternalEvents(cloudData.events);
+        })
+        .catch(() => {});
+    }
     onSuccess?.();
   };
 
@@ -139,28 +140,18 @@ export function GoogleSignInButton({
       setAuthError(msg);
       addToast({
         message: err?.isUnauthorizedDomain
-          ? 'Preview domain not whitelisted yet. Enter your email below to sign in.'
+          ? 'Preview domain is not enabled for Google sign-in. Continue in guest mode or configure Firebase authorized domains.'
           : err?.isPopupBlocked
-          ? 'Popup was blocked. Enter your email below to sign in.'
+          ? 'Google sign-in popup was blocked. Continue in guest mode or allow popups.'
           : msg,
         tone: 'warning',
       });
-      setShowEmailForm(true);
     } finally {
       setBusy(false);
     }
   };
 
-  const handleEmailSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const email = emailInput.trim();
-    if (!email || !email.includes('@')) {
-      setAuthError('Please enter a valid email address.');
-      return;
-    }
-    const res = emailSignIn(email, nameInput.trim() || undefined);
-    applyAuthResult(res);
-  };
+  const handleGuestContinue = () => applyAuthResult(guestSignIn());
 
   return (
     <div className="space-y-2 w-full">
@@ -198,49 +189,14 @@ export function GoogleSignInButton({
         <span>{busy ? 'Connecting to Google...' : 'Sign in with Google'}</span>
       </button>
 
-      {showEmailOption && !showEmailForm && (
+      {showGuestOption && (
         <button
           type="button"
-          onClick={() => setShowEmailForm(true)}
+          onClick={handleGuestContinue}
           className="w-full py-1.5 px-3 rounded-xl border border-dashed border-[var(--border-strong)] hover:border-[var(--accent)] bg-[var(--surface-1)] hover:bg-[var(--accent-soft)] text-[11px] font-semibold text-[var(--text-2)] hover:text-[var(--accent)] transition text-center"
         >
-          Sign in with Email
+          Continue as guest
         </button>
-      )}
-
-      {showEmailForm && (
-        <form onSubmit={handleEmailSubmit} className="space-y-2 p-2.5 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
-          <input
-            type="email"
-            required
-            value={emailInput}
-            onChange={(e) => setEmailInput(e.target.value)}
-            placeholder="your.email@example.com"
-            className="input-base w-full px-2.5 py-1.5 text-xs rounded-lg"
-          />
-          <input
-            type="text"
-            value={nameInput}
-            onChange={(e) => setNameInput(e.target.value)}
-            placeholder="Your Name (Optional)"
-            className="input-base w-full px-2.5 py-1.5 text-xs rounded-lg"
-          />
-          <div className="flex items-center gap-2">
-            <button
-              type="submit"
-              className="btn-accent flex-1 py-1.5 px-2.5 rounded-lg text-xs font-semibold"
-            >
-              Sign In & Open Software
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowEmailForm(false)}
-              className="btn-ghost py-1.5 px-2 rounded-lg text-xs text-[var(--text-3)]"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
       )}
 
       {authError && (
@@ -1316,19 +1272,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const settingsBtnRef = useRef<HTMLButtonElement | null>(null);
   const notifBtnRef = useRef<HTMLButtonElement | null>(null);
 
-  // Hydrate cached real Gmail notifications for the signed-in user from backend on mount
-  useEffect(() => {
-    if (!userEmail) return;
-    fetch(`/api/gmail/notifications?email=${encodeURIComponent(userEmail)}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data && Array.isArray(data.messages) && data.messages.length > 0) {
-          ingestGmailNotifications(data.messages);
-        }
-      })
-      .catch(() => {});
-  }, [userEmail, ingestGmailNotifications]);
-
+  // Mail contents (including one-time codes) stay in this browser session; the server does not cache them.
   // Real-time Gmail polling loop every 15s + on window focus/visibility when signed in with Google OAuth token
   useEffect(() => {
     if (!hasGoogleToken) return;

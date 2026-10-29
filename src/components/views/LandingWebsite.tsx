@@ -20,7 +20,7 @@ import {
   type CustomizationPlanId,
 } from '../../store/useCadenceStore';
 import { parseTaskInput } from '../../lib/nlpParser';
-import { googleSignIn, emailSignIn, logout } from '../../lib/firebase';
+import { googleSignIn, guestSignIn, logout } from '../../lib/firebase';
 import type { ViewId } from '../../db/schema';
 
 interface PrimaryContrastTier {
@@ -150,8 +150,6 @@ export function LandingWebsite() {
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [emailAuthVal, setEmailAuthVal] = useState('');
-  const [nameAuthVal, setNameAuthVal] = useState('');
 
   // Interactive Hero Preview state
   const [heroTab, setHeroTab] = useState<'my_day' | 'google_sync' | 'gmail_otp'>('my_day');
@@ -275,9 +273,9 @@ export function LandingWebsite() {
     } catch (err: any) {
       setAuthError(
         err?.isUnauthorizedDomain
-          ? 'Preview domain is not yet whitelisted in Firebase Console. Sign in with your email below to access.'
+          ? 'Google sign-in is unavailable for this domain. Continue as a guest or configure Firebase authorized domains.'
           : err?.isPopupBlocked
-          ? 'Browser blocked Google sign-in popup. Sign in with your email below to access.'
+          ? 'Google sign-in popup was blocked. Continue as a guest or allow popups.'
           : err?.message || 'Google sign-in could not be completed.'
       );
     } finally {
@@ -285,23 +283,17 @@ export function LandingWebsite() {
     }
   };
 
-  const handleEmailAuth = (e: React.FormEvent) => {
-    e.preventDefault();
-    const email = emailAuthVal.trim();
-    if (!email || !email.includes('@')) {
-      setAuthError('Please enter a valid email address.');
-      return;
-    }
-    const res = emailSignIn(email, nameAuthVal.trim() || undefined);
+  const handleGuestAuth = () => {
+    const res = guestSignIn();
     setAuthUser({
       uid: res.user.uid,
-      email: res.user.email,
+      email: null,
       name: res.user.displayName,
-      photo: res.user.photoURL,
+      photo: null,
       hasToken: false,
     });
     addToast({
-      message: `Signed in as ${res.user.displayName || res.user.email}. Welcome to Cadence!`,
+      message: 'Guest workspace opened. Changes stay in this browser session.',
       tone: 'success',
     });
     setAuthModalOpen(false);
@@ -472,6 +464,7 @@ export function LandingWebsite() {
       {authModalOpen && (
         <div
           role="dialog"
+          aria-modal="true"
           aria-label="Sign In to Cadence"
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
         >
@@ -482,7 +475,7 @@ export function LandingWebsite() {
                   Sign In to Cadence
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Connect your Google account or sign in with your email
+                  Connect Google for cloud sync, or use a temporary guest workspace
                 </p>
               </div>
               <button
@@ -514,45 +507,19 @@ export function LandingWebsite() {
               <div className="relative flex items-center justify-center my-1.5">
                 <span className="w-full border-t border-slate-200 dark:border-slate-800" />
                 <span className="absolute bg-white dark:bg-[#0F172A] px-2 text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
-                  or sign in with email
+                  or continue without an account
                 </span>
               </div>
-
-              <form onSubmit={handleEmailAuth} className="space-y-2.5">
-                <div className="space-y-1">
-                  <label htmlFor="auth-email-input" className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-                    Email Address
-                  </label>
-                  <input
-                    id="auth-email-input"
-                    type="email"
-                    required
-                    value={emailAuthVal}
-                    onChange={(e) => setEmailAuthVal(e.target.value)}
-                    placeholder="name@example.com"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label htmlFor="auth-name-input" className="block text-[11px] font-semibold text-slate-700 dark:text-slate-300">
-                    Your Name <span className="text-[10px] text-slate-400 font-normal">(Optional)</span>
-                  </label>
-                  <input
-                    id="auth-name-input"
-                    type="text"
-                    value={nameAuthVal}
-                    onChange={(e) => setNameAuthVal(e.target.value)}
-                    placeholder="Alex Rivera"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition text-center shadow-xs cursor-pointer"
-                >
-                  Sign In & Access Software →
-                </button>
-              </form>
+              <button
+                type="button"
+                onClick={handleGuestAuth}
+                className="w-full py-2.5 px-4 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 bg-slate-50 dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-200 transition"
+              >
+                Continue as guest
+              </button>
+              <p className="text-[10px] leading-relaxed text-slate-500 dark:text-slate-400 text-center">
+                Guest workspaces are temporary and are not linked to an email or cloud account.
+              </p>
 
               {authError && (
                 <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-[11px] text-red-600 dark:text-red-300">
