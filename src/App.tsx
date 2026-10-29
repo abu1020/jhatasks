@@ -226,7 +226,7 @@ export default function App() {
         <EcosystemModals />
         <ToastViewport />
         <ParticleBurstOverlay />
-        <InHouseAssistant />
+        {canViewSoftware && <InHouseAssistant />}
       </div>
     </MotionConfig>
   );

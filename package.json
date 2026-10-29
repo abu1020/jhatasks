@@ -7,7 +7,7 @@
     "dev": "tsx server.ts",
     "start": "tsx server.ts",
     "build": "vite build",
-    "test": "tsx --test src/lib/nlpParser.test.ts firestore.rules.test.ts",
+    "test": "tsx --test src/lib/nlpParser.test.ts src/lib/assistantUtils.test.ts firestore.rules.test.ts",
     "security": "npm audit && eslint firestore.rules",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
