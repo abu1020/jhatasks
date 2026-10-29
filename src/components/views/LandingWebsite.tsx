@@ -20,7 +20,7 @@ import {
   type CustomizationPlanId,
 } from '../../store/useCadenceStore';
 import { parseTaskInput } from '../../lib/nlpParser';
-import { googleSignIn, guestSignIn, logout } from '../../lib/firebase';
+import { googleSignIn, logout } from '../../lib/firebase';
 import type { ViewId } from '../../db/schema';
 
 interface PrimaryContrastTier {
@@ -186,26 +186,68 @@ export function LandingWebsite() {
     [liveNlpSample]
   );
 
+  const handleGoogleAuth = async () => {
+    setAuthBusy(true);
+    setAuthError(null);
+    try {
+      const res = await googleSignIn();
+      setAuthUser({
+        uid: res.user.uid,
+        email: res.user.email,
+        name: res.user.displayName,
+        photo: res.user.photoURL,
+        hasToken: Boolean(res.accessToken),
+      });
+      addToast({
+        message: `Signed in as ${res.user.displayName || res.user.email}. Google account authenticated!`,
+        tone: 'success',
+      });
+      setAuthModalOpen(false);
+      setShowLandingPage(false);
+      setActiveView('my_day');
+    } catch (err: any) {
+      setAuthError(
+        err?.isPopupBlocked
+          ? 'Browser blocked the Google sign-in popup. Please allow popups to complete authentication.'
+          : err?.message || 'Google sign-in could not be completed.'
+      );
+    } finally {
+      setAuthBusy(false);
+    }
+  };
+
   const handleLaunchWorkspace = useCallback(
     (targetView?: ViewId) => {
+      if (!userEmail) {
+        void handleGoogleAuth();
+        return;
+      }
       if (targetView) {
         setActiveView(targetView);
       }
       setShowLandingPage(false);
     },
-    [setActiveView, setShowLandingPage]
+    [userEmail, setActiveView, setShowLandingPage]
   );
 
   const handleStartForFree = useCallback(() => {
+    if (!userEmail) {
+      void handleGoogleAuth();
+      return;
+    }
     updateCustomizationPlan('free');
     addToast({
       message: 'Started for Free (₹0 Forever). Welcome to Cadence!',
       tone: 'success',
     });
     setShowLandingPage(false);
-  }, [updateCustomizationPlan, addToast, setShowLandingPage]);
+  }, [userEmail, updateCustomizationPlan, addToast, setShowLandingPage]);
 
   const handleCreateNlpTaskAndLaunch = useCallback(async () => {
+    if (!userEmail) {
+      void handleGoogleAuth();
+      return;
+    }
     if (!liveNlpSample.trim()) {
       handleLaunchWorkspace('my_day');
       return;
@@ -234,10 +276,14 @@ export function LandingWebsite() {
       setShowLandingPage(false);
       openComposer({ initialTitle: liveNlpSample });
     }
-  }, [liveNlpSample, createTask, workspace, addToast, setShowLandingPage, setActiveView, openComposer, handleLaunchWorkspace]);
+  }, [userEmail, liveNlpSample, createTask, workspace, addToast, setShowLandingPage, setActiveView, openComposer, handleLaunchWorkspace]);
 
   const handleSelectTier = useCallback(
     (tierId: CustomizationPlanId) => {
+      if (!userEmail) {
+        void handleGoogleAuth();
+        return;
+      }
       if (tierId === 'free') {
         handleStartForFree();
         return;
@@ -248,58 +294,8 @@ export function LandingWebsite() {
         el.scrollIntoView({ behavior: 'smooth' });
       }
     },
-    [handleStartForFree]
+    [userEmail, handleStartForFree]
   );
-
-  const handleGoogleAuth = async () => {
-    setAuthBusy(true);
-    setAuthError(null);
-    try {
-      const res = await googleSignIn();
-      setAuthUser({
-        uid: res.user.uid,
-        email: res.user.email,
-        name: res.user.displayName,
-        photo: res.user.photoURL,
-        hasToken: Boolean(res.accessToken),
-      });
-      addToast({
-        message: `Signed in as ${res.user.displayName || res.user.email}. Full software access unlocked!`,
-        tone: 'success',
-      });
-      setAuthModalOpen(false);
-      setShowLandingPage(false);
-      setActiveView('my_day');
-    } catch (err: any) {
-      setAuthError(
-        err?.isUnauthorizedDomain
-          ? 'Google sign-in is unavailable for this domain. Continue as a guest or configure Firebase authorized domains.'
-          : err?.isPopupBlocked
-          ? 'Google sign-in popup was blocked. Continue as a guest or allow popups.'
-          : err?.message || 'Google sign-in could not be completed.'
-      );
-    } finally {
-      setAuthBusy(false);
-    }
-  };
-
-  const handleGuestAuth = () => {
-    const res = guestSignIn();
-    setAuthUser({
-      uid: res.user.uid,
-      email: null,
-      name: res.user.displayName,
-      photo: null,
-      hasToken: false,
-    });
-    addToast({
-      message: 'Guest workspace opened. Changes stay in this browser session.',
-      tone: 'success',
-    });
-    setAuthModalOpen(false);
-    setShowLandingPage(false);
-    setActiveView('my_day');
-  };
 
   const handleSignOut = async () => {
     await logout();
@@ -429,11 +425,11 @@ export function LandingWebsite() {
             ) : (
               <button
                 type="button"
-                onClick={() => setAuthModalOpen(true)}
-                className="btn-ghost px-3 py-1.5 rounded-lg text-xs font-semibold text-[var(--text-2)] hover:text-[var(--text-1)] inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
+                onClick={() => void handleGoogleAuth()}
+                className="btn-ghost px-3 py-1.5 rounded-lg text-xs font-semibold text-[var(--text-2)] hover:text-[var(--text-1)] inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
               >
                 <LogIn className="w-3.5 h-3.5" />
-                <span>Sign In</span>
+                <span>Sign In with Google</span>
               </button>
             )}
 
@@ -450,7 +446,7 @@ export function LandingWebsite() {
               <button
                 type="button"
                 onClick={handleStartForFree}
-                className="btn-accent px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 shadow-sm"
+                className="btn-accent px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 shadow-sm cursor-pointer"
               >
                 <span>Start for Free</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -460,22 +456,22 @@ export function LandingWebsite() {
         </div>
       </header>
 
-      {/* SIGN IN DIALOG */}
+      {/* EXCLUSIVE GOOGLE SIGN IN DIALOG */}
       {authModalOpen && (
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Sign In to Cadence"
+          aria-label="Google Account Authentication"
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
         >
           <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-[#0F172A] border border-slate-300 dark:border-slate-700 p-5 shadow-2xl space-y-4 text-slate-900 dark:text-slate-100">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
               <div className="space-y-0.5">
                 <h3 className="font-display text-base font-bold text-slate-900 dark:text-white">
-                  Sign In to Cadence
+                  Google Account Authentication
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Connect Google for cloud sync, or use a temporary guest workspace
+                  Official Google Sign-In required to access software
                 </p>
               </div>
               <button
@@ -491,9 +487,9 @@ export function LandingWebsite() {
             <div className="space-y-3 pt-1">
               <button
                 type="button"
-                onClick={handleGoogleAuth}
+                onClick={() => void handleGoogleAuth()}
                 disabled={authBusy}
-                className="w-full py-2.5 px-4 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#1E293B] hover:bg-slate-50 dark:hover:bg-[#283548] text-xs font-semibold text-slate-800 dark:text-slate-100 transition inline-flex items-center justify-center gap-2.5 shadow-xs disabled:opacity-50 cursor-pointer"
+                className="w-full py-3 px-4 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#1E293B] hover:bg-slate-50 dark:hover:bg-[#283548] text-xs font-semibold text-slate-800 dark:text-slate-100 transition inline-flex items-center justify-center gap-2.5 shadow-md disabled:opacity-50 cursor-pointer"
               >
                 <svg className="w-4 h-4" viewBox="0 0 48 48">
                   <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
@@ -501,44 +497,18 @@ export function LandingWebsite() {
                   <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
                   <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
                 </svg>
-                <span>{authBusy ? 'Connecting to Google...' : 'Continue with Google'}</span>
+                <span>{authBusy ? 'Connecting to Google...' : 'Sign In with Google Account'}</span>
               </button>
-
-              <div className="relative flex items-center justify-center my-1.5">
-                <span className="w-full border-t border-slate-200 dark:border-slate-800" />
-                <span className="absolute bg-white dark:bg-[#0F172A] px-2 text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
-                  or continue without an account
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={handleGuestAuth}
-                className="w-full py-2.5 px-4 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 bg-slate-50 dark:bg-slate-900 text-xs font-semibold text-slate-700 dark:text-slate-200 transition"
-              >
-                Continue as guest
-              </button>
-              <p className="text-[10px] leading-relaxed text-slate-500 dark:text-slate-400 text-center">
-                Guest workspaces are temporary and are not linked to an email or cloud account.
-              </p>
 
               {authError && (
                 <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-[11px] text-red-600 dark:text-red-300">
                   {authError}
                 </div>
               )}
-            </div>
 
-            <div className="pt-2 text-center">
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthModalOpen(false);
-                  handleStartForFree();
-                }}
-                className="text-xs text-slate-500 dark:text-slate-400 hover:underline"
-              >
-                Skip sign in and open Free Workspace →
-              </button>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 text-center leading-normal pt-1">
+                Only verified Google Account credentials are permitted to access software tools & views. Unauthenticated access is strictly disabled.
+              </p>
             </div>
           </div>
         </div>

@@ -36,8 +36,9 @@ npm run build
 
 ## Data & Security Notes
 
-- Google sign-in is the authenticated account flow. The email-only lookalike login was removed; guest mode is clearly anonymous and does not sync to Firestore.
-- Guest API data is isolated by a random `HttpOnly`, `SameSite=Lax` browser-session cookie and held in bounded in-memory stores. It is temporary and is lost on server restart or session eviction; it is not a durable database or an authentication boundary.
+- Google sign-in is the only application account flow. The email-only lookalike login was removed, and the workspace is gated until Firebase authentication succeeds.
+- Google sign-in is required to enter the application workspace. The task API uses a random `HttpOnly`, `SameSite=Lax` browser-session capability to isolate its bounded, temporary cache; this is not a Firebase identity token or durable storage. Cache data is lost on server restart or eviction; Firestore remains the durable, per-user store and enforces its own rules.
+- The optional Google Sheets `IMPORTDATA` link is an explicit read-only bearer capability, expires after seven days, and is revoked when a replacement link is generated. Anyone holding the link can read that session's task export.
 - Gmail access tokens are accepted only in the `Authorization: Bearer` header. Gmail message contents and OTPs are returned to the requesting browser and are never cached server-side.
 - Firestore access remains governed by `firestore.rules`. Deploy and validate these rules in the Firebase project before relying on cloud storage; the repository's rules test is a lightweight model/static check, not a Firestore Emulator test.
 - Configure `DATABASE_URL` explicitly before running Drizzle commands. Never place a development or production database URL in source control.

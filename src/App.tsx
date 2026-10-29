@@ -61,8 +61,10 @@ export default function App() {
           photo: user.photoURL,
           hasToken: Boolean(token),
         });
+        void store.hydrateFromApi();
         try {
           const cloud = await fetchFirestoreUserTasksAndEvents(user.uid);
+          if (useCadenceStore.getState().userUid !== user.uid) return;
           if (cloud.tasks.length > 0) store.mergeExternalTasks(cloud.tasks);
           if (cloud.events.length > 0) store.mergeExternalEvents(cloud.events);
         } catch {
@@ -187,14 +189,18 @@ export default function App() {
       ? 'ws-personal'
       : 'ws-all';
 
+  const userEmail = useCadenceStore((s) => s.userEmail);
+  const userUid = useCadenceStore((s) => s.userUid);
+
+  // STRICT RULE: Software workspace is ONLY viewable when user is authenticated via Google
+  const canViewSoftware = Boolean(userEmail || userUid) && !showLandingPage;
+
   return (
     <MotionConfig reducedMotion="user">
       <div className={`${wsClass} min-h-dvh bg-[var(--bg)] text-[var(--text-1)] relative`}>
         <div className="ambient-glow" aria-hidden="true" />
 
-        {showLandingPage ? (
-          <LandingWebsite />
-        ) : (
+        {canViewSoftware ? (
           <AppShell>
             <Suspense
               fallback={
@@ -211,6 +217,8 @@ export default function App() {
               {activeView === 'insights' && <InsightsView />}
             </Suspense>
           </AppShell>
+        ) : (
+          <LandingWebsite />
         )}
 
         <TaskComposerModal />

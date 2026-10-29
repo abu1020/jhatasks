@@ -173,9 +173,9 @@ export const googleSignIn = async (): Promise<SignInResult> => {
 
     const enhancedErr: any = new Error(
       isUnauthorizedDomain
-        ? 'Preview domain is not authorized for Google OAuth. Configure Firebase authorized domains or continue as a guest.'
+        ? 'Preview domain is not authorized for Google OAuth. Add it to Firebase authorized domains to sign in.'
         : isPopupBlocked
-        ? 'Browser blocked the Google sign-in popup. Enable popups or continue as a guest.'
+        ? 'Browser blocked the Google sign-in popup. Enable popups to authenticate.'
         : message.includes('closed')
         ? 'Google sign-in popup was closed before completion.'
         : `Google sign-in error: ${message}`
@@ -188,18 +188,6 @@ export const googleSignIn = async (): Promise<SignInResult> => {
     isSigningIn = false;
   }
 };
-
-// Guest mode is intentionally anonymous and is not represented as an authenticated account.
-export const guestSignIn = (displayName = 'Guest'): SignInResult => ({
-  user: {
-    uid: `guest_${crypto.randomUUID()}`,
-    email: null,
-    displayName: displayName.trim().slice(0, 80) || 'Guest',
-    photoURL: null,
-  },
-  accessToken: null,
-  isLocalFallback: true,
-});
 
 export const getAccessToken = (): string | null => cachedAccessToken;
 
@@ -803,7 +791,8 @@ export async function pullTasksFromGoogleSheet(
   }
 
   const proxyRes = await fetch(
-    `/api/sheets/sync?spreadsheetId=${encodeURIComponent(sheetId)}`
+    `/api/sheets/sync?spreadsheetId=${encodeURIComponent(sheetId)}`,
+    { headers: auth.currentUser ? { 'X-Cadence-User': auth.currentUser.uid } : {} }
   );
   if (!proxyRes.ok) {
     throw new Error('Could not read Google Sheet');

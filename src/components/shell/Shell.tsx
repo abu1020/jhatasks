@@ -49,7 +49,6 @@ import {
   fetchGoogleTasksLive,
   googleSignIn,
   logout,
-  guestSignIn,
 } from '../../lib/firebase';
 import { parseGoogleTasksV1Json, type GmailNotificationItem } from '../../lib/nlpParser';
 import { useCadenceStore } from '../../store/useCadenceStore';
@@ -72,11 +71,9 @@ export const VIEW_CONFIG: {
 
 export function GoogleSignInButton({
   compact = false,
-  showGuestOption = true,
   onSuccess,
 }: {
   compact?: boolean;
-  showGuestOption?: boolean;
   onSuccess?: () => void;
 }) {
   const setAuthUser = useCadenceStore((s) => s.setAuthUser);
@@ -92,7 +89,6 @@ export function GoogleSignInButton({
   const applyAuthResult = (res: {
     user: { uid: string; email: string | null; displayName: string | null; photoURL: string | null };
     accessToken: string | null;
-    isLocalFallback?: boolean;
   }) => {
     setAuthUser({
       uid: res.user.uid,
@@ -106,9 +102,7 @@ export function GoogleSignInButton({
     setActiveView('my_day');
 
     addToast({
-      message: res.isLocalFallback
-        ? 'Guest workspace opened. Changes stay in this browser session.'
-        : `Signed in as ${res.user.displayName || res.user.email}. Full software access unlocked!`,
+      message: `Signed in as ${res.user.displayName || res.user.email}. Google account authenticated!`,
       tone: 'success',
     });
     if (res.accessToken && res.user.email) {
@@ -118,14 +112,12 @@ export function GoogleSignInButton({
         })
         .catch(() => {});
     }
-    if (!res.isLocalFallback) {
-      fetchFirestoreUserTasksAndEvents(res.user.uid)
-        .then((cloudData) => {
-          if (cloudData.tasks.length > 0) mergeExternalTasks(cloudData.tasks);
-          if (cloudData.events.length > 0) mergeExternalEvents(cloudData.events);
-        })
-        .catch(() => {});
-    }
+    fetchFirestoreUserTasksAndEvents(res.user.uid)
+      .then((cloudData) => {
+        if (cloudData.tasks.length > 0) mergeExternalTasks(cloudData.tasks);
+        if (cloudData.events.length > 0) mergeExternalEvents(cloudData.events);
+      })
+      .catch(() => {});
     onSuccess?.();
   };
 
@@ -139,10 +131,8 @@ export function GoogleSignInButton({
       const msg = err?.message || 'Could not complete Google sign-in';
       setAuthError(msg);
       addToast({
-        message: err?.isUnauthorizedDomain
-          ? 'Preview domain is not enabled for Google sign-in. Continue in guest mode or configure Firebase authorized domains.'
-          : err?.isPopupBlocked
-          ? 'Google sign-in popup was blocked. Continue in guest mode or allow popups.'
+        message: err?.isPopupBlocked
+          ? 'Browser blocked the Google sign-in popup. Please allow popups to log in.'
           : msg,
         tone: 'warning',
       });
@@ -151,15 +141,13 @@ export function GoogleSignInButton({
     }
   };
 
-  const handleGuestContinue = () => applyAuthResult(guestSignIn());
-
   return (
     <div className="space-y-2 w-full">
       <button
         type="button"
         onClick={handleSignIn}
         disabled={busy}
-        className={`gsi-material-button inline-flex items-center justify-center gap-2.5 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text-1)] hover:bg-[var(--surface-3)] transition font-medium whitespace-nowrap shrink-0 ${
+        className={`gsi-material-button inline-flex items-center justify-center gap-2.5 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text-1)] hover:bg-[var(--surface-3)] transition font-medium whitespace-nowrap shrink-0 cursor-pointer ${
           compact ? 'px-3 py-2 text-xs min-h-[38px]' : 'w-full px-3.5 py-2.5 text-xs min-h-[40px]'
         }`}
       >
@@ -186,18 +174,8 @@ export function GoogleSignInButton({
             d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
           />
         </svg>
-        <span>{busy ? 'Connecting to Google...' : 'Sign in with Google'}</span>
+        <span>{busy ? 'Connecting to Google...' : 'Sign in with Google Account'}</span>
       </button>
-
-      {showGuestOption && (
-        <button
-          type="button"
-          onClick={handleGuestContinue}
-          className="w-full py-1.5 px-3 rounded-xl border border-dashed border-[var(--border-strong)] hover:border-[var(--accent)] bg-[var(--surface-1)] hover:bg-[var(--accent-soft)] text-[11px] font-semibold text-[var(--text-2)] hover:text-[var(--accent)] transition text-center"
-        >
-          Continue as guest
-        </button>
-      )}
 
       {authError && (
         <p className="text-[11px] text-[#F43F5E] px-1 leading-snug">
@@ -1272,7 +1250,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const settingsBtnRef = useRef<HTMLButtonElement | null>(null);
   const notifBtnRef = useRef<HTMLButtonElement | null>(null);
 
-  // Mail contents (including one-time codes) stay in this browser session; the server does not cache them.
+  // Mail contents, including OTPs, stay client-side; the API deliberately does not cache them.
   // Real-time Gmail polling loop every 15s + on window focus/visibility when signed in with Google OAuth token
   useEffect(() => {
     if (!hasGoogleToken) return;

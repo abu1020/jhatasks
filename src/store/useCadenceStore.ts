@@ -220,10 +220,18 @@ interface CadenceState {
 const pendingPatches = new Map<string, Partial<Task>>();
 const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const pendingDeleteTimers = new Map<string, ReturnType<typeof setTimeout>>();
+let hydrationGeneration = 0;
+
+async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers);
+  const uid = useCadenceStore.getState().userUid;
+  if (uid) headers.set('X-Cadence-User', uid);
+  return fetch(input, { ...init, headers });
+}
 
 async function sendPatchWithRetry(id: string, patch: Partial<Task>): Promise<boolean> {
   const attempt = async () => {
-    const res = await fetch(`/api/tasks/${encodeURIComponent(id)}`, {
+    const res = await apiFetch(`/api/tasks/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
@@ -332,27 +340,43 @@ export const useCadenceStore = create<CadenceState>()(
         }),
 
       setAuthUser: (user) =>
-        set({
-          userUid: user.uid,
-          userEmail: user.email,
-          userName: user.name,
-          userPhoto: user.photo,
-          hasGoogleToken: user.hasToken,
+        set((state) => {
+          const identityChanged = state.userUid !== user.uid;
+          if (identityChanged) {
+            hydrationGeneration += 1;
+            for (const timer of debounceTimers.values()) clearTimeout(timer);
+            for (const timer of pendingDeleteTimers.values()) clearTimeout(timer);
+            debounceTimers.clear();
+            pendingDeleteTimers.clear();
+            pendingPatches.clear();
+          }
+          return {
+            userUid: user.uid,
+            userEmail: user.email,
+            userName: user.name,
+            userPhoto: user.photo,
+            hasGoogleToken: user.hasToken,
+            ...(identityChanged ? { tasks: [], events: [], hydrated: false, loading: false } : {}),
+          };
         }),
 
       hydrateFromApi: async () => {
         if (get().hydrated) return;
+        const generation = ++hydrationGeneration;
+        const requestedUid = get().userUid;
         set({ loading: true });
         try {
-          const res = await fetch('/api/tasks');
+          const res = await apiFetch('/api/tasks');
           if (!res.ok) throw new Error('Failed to fetch /api/tasks');
           const data: { tasks: Task[]; events: CalendarEvent[] } = await res.json();
+          if (generation !== hydrationGeneration || requestedUid !== get().userUid) return;
           let events = Array.isArray(data.events) ? data.events : [];
           const tasks = Array.isArray(data.tasks) ? data.tasks : [];
 
           // HYDRATION RULE: if events are empty call /api/seed; tasks must start EMPTY
           if (events.length === 0) {
-            const seedRes = await fetch('/api/seed', { method: 'POST' });
+            const seedRes = await apiFetch('/api/seed', { method: 'POST' });
+            if (generation !== hydrationGeneration || requestedUid !== get().userUid) return;
             if (seedRes.ok) {
               const seedData = await seedRes.json();
               if (Array.isArray(seedData.events)) {
@@ -368,7 +392,9 @@ export const useCadenceStore = create<CadenceState>()(
             loading: false,
           });
         } catch {
-          set({ hydrated: true, loading: false });
+          if (generation === hydrationGeneration && requestedUid === get().userUid) {
+            set({ hydrated: true, loading: false });
+          }
         }
       },
 
@@ -414,7 +440,7 @@ export const useCadenceStore = create<CadenceState>()(
       syncTasksWithGoogleSheets: async (showToast = false) => {
         const state = get();
         try {
-          const res = await fetch('/api/sheets/sync', {
+          const res = await apiFetch('/api/sheets/sync', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -764,7 +790,7 @@ export const useCadenceStore = create<CadenceState>()(
         }));
 
         try {
-          const res = await fetch('/api/tasks', {
+          const res = await apiFetch('/api/tasks', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ tasks: [newTask] }),
@@ -798,7 +824,7 @@ export const useCadenceStore = create<CadenceState>()(
           return { tasks: Array.from(byId.values()) };
         });
         try {
-          await fetch('/api/tasks', {
+          await apiFetch('/api/tasks', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ tasks: newTasks }),
@@ -886,7 +912,7 @@ export const useCadenceStore = create<CadenceState>()(
             message: `Scheduled next recurring instance for ${clone.due_date}`,
             tone: 'success',
           });
-          void fetch('/api/tasks', {
+          void apiFetch('/api/tasks', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ tasks: [clone] }),
@@ -952,7 +978,7 @@ export const useCadenceStore = create<CadenceState>()(
         const deleteTimer = setTimeout(async () => {
           pendingDeleteTimers.delete(id);
           try {
-            await fetch(`/api/tasks/${encodeURIComponent(id)}`, {
+            await apiFetch(`/api/tasks/${encodeURIComponent(id)}`, {
               method: 'DELETE',
               keepalive: true,
             });

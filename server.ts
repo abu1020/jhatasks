@@ -28,6 +28,10 @@ const sessions = new Map<string, SessionData>();
 const SESSION_COOKIE = 'cadence_session';
 const MAX_SESSIONS = 1000;
 const MAX_TASKS_PER_SESSION = 2000;
+const FEED_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_FEED_TOKENS = 1000;
+const feedTokens = new Map<string, { sessionId: string; expiresAt: number }>();
+const feedRateLimits = new Map<string, { windowStartedAt: number; count: number }>();
 
 function newSession(): SessionData {
   return {
@@ -267,22 +271,30 @@ async function startServer() {
     }
     const cookie = req.headers.cookie?.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${SESSION_COOKIE}=`));
     let sessionId = cookie?.slice(SESSION_COOKIE.length + 1) || '';
-    if (!/^[A-Za-z0-9_-]{40,50}$/.test(sessionId) || !sessions.has(sessionId)) {
+    if (!/^[A-Za-z0-9_-]{40,50}$/.test(sessionId)) {
       sessionId = randomBytes(32).toString('base64url');
+      const secure = req.secure || req.get('x-forwarded-proto') === 'https' ? '; Secure' : '';
+      res.append('Set-Cookie', `${SESSION_COOKIE}=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${secure}`);
+    }
+    // The UID header separates accounts that share a browser cookie. It is only a namespace;
+    // the cookie remains the unguessable capability and durable data is still protected by Firestore.
+    const requestedUid = String(req.get('x-cadence-user') || 'anonymous');
+    const uidScope = /^[A-Za-z0-9._:-]{1,128}$/.test(requestedUid) ? requestedUid : 'anonymous';
+    const sessionScope = `${sessionId}:${uidScope}`;
+    if (!sessions.has(sessionScope)) {
       if (sessions.size >= MAX_SESSIONS) {
         const oldest = sessions.keys().next().value;
         if (oldest) sessions.delete(oldest);
       }
-      sessions.set(sessionId, newSession());
-      const secure = req.secure || req.get('x-forwarded-proto') === 'https' ? '; Secure' : '';
-      res.append('Set-Cookie', `${SESSION_COOKIE}=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${secure}`);
+      sessions.set(sessionScope, newSession());
     } else {
-      // Refresh insertion order as a simple bounded LRU for ephemeral guest sessions.
-      const value = sessions.get(sessionId)!;
-      sessions.delete(sessionId);
-      sessions.set(sessionId, value);
+      // Refresh insertion order as a simple bounded LRU for ephemeral account sessions.
+      const value = sessions.get(sessionScope)!;
+      sessions.delete(sessionScope);
+      sessions.set(sessionScope, value);
     }
-    const session = sessions.get(sessionId)!;
+    const session = sessions.get(sessionScope)!;
+    res.locals.sessionId = sessionScope;
     res.locals.session = session;
     if (req.path.startsWith('/api/')) {
       const now = Date.now();
@@ -473,28 +485,61 @@ async function startServer() {
     ];
   }
 
-  app.get('/api/tasks/sheets-feed.csv', (_req, res) => {
-    const tasks = Array.from(sessionFor(res).tasks.values()).sort(
-      (a, b) => a.sort_order - b.sort_order
-    );
-    const rows = buildTasksCsvRows(tasks);
-    const csv = rows
-      .map((r) =>
-        r
-          .map((cell) => {
-            let value = String(cell ?? '');
-            // Prevent spreadsheet formula execution when opening exported CSV files.
-            if (/^[=+\-@\t\r]/.test(value)) value = `'${value}`;
-            return value.includes(',') || value.includes('"') || value.includes('\n') || value.includes('\r')
-              ? `"${value.replace(/"/g, '""')}"`
-              : value;
-          })
-          .join(',')
-      )
+  app.get('/api/tasks/sheets-feed.csv', (req, res) => {
+    const token = String(req.query.token || '');
+    const grant = feedTokens.get(token);
+    if (!grant || token.length !== 43) return res.status(401).send('Invalid or expired feed link');
+    if (grant.expiresAt <= Date.now() || !sessions.has(grant.sessionId)) {
+      feedTokens.delete(token);
+      return res.status(410).send('Feed link has expired');
+    }
+    const ip = req.ip || 'unknown';
+    const now = Date.now();
+    const rate = feedRateLimits.get(ip) || { windowStartedAt: now, count: 0 };
+    if (now - rate.windowStartedAt >= 60_000) {
+      rate.windowStartedAt = now;
+      rate.count = 0;
+    }
+    rate.count += 1;
+    if (!feedRateLimits.has(ip) && feedRateLimits.size >= 5000) {
+      const oldestIp = feedRateLimits.keys().next().value;
+      if (oldestIp) feedRateLimits.delete(oldestIp);
+    }
+    feedRateLimits.set(ip, rate);
+    if (rate.count > 60) return res.status(429).send('Feed rate limit exceeded');
+
+    const ownerSession = sessions.get(grant.sessionId)!;
+    const tasks = Array.from(ownerSession.tasks.values()).sort((a, b) => a.sort_order - b.sort_order);
+    const csv = buildTasksCsvRows(tasks)
+      .map((row) => row.map((cell) => {
+        let value = String(cell ?? '');
+        // Prevent spreadsheet formula execution when opening exported CSV files.
+        if (/^[=+\-@\t\r]/.test(value)) value = `'${value}`;
+        return value.includes(',') || value.includes('"') || value.includes('\n') || value.includes('\r')
+          ? `"${value.replace(/"/g, '""')}"`
+          : value;
+      }).join(','))
       .join('\n');
+    res.setHeader('Referrer-Policy', 'no-referrer');
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'inline; filename="cadence-google-tasks-sheet.csv"');
-    res.send(csv);
+    return res.send(csv);
+  });
+
+  // Mint a seven-day read-only capability link for Google Sheets IMPORTDATA.
+  app.post('/api/tasks/sheets-feed-token', (req, res) => {
+    const sessionId = String(res.locals.sessionId || '');
+    for (const [token, grant] of feedTokens) {
+      if (grant.sessionId === sessionId || grant.expiresAt <= Date.now()) feedTokens.delete(token);
+    }
+    if (feedTokens.size >= MAX_FEED_TOKENS) {
+      const oldest = feedTokens.keys().next().value;
+      if (oldest) feedTokens.delete(oldest);
+    }
+    const token = randomBytes(32).toString('base64url');
+    const expiresAt = Date.now() + FEED_TOKEN_TTL_MS;
+    feedTokens.set(token, { sessionId, expiresAt });
+    return res.status(201).json({ path: `/api/tasks/sheets-feed.csv?token=${token}`, expiresAt });
   });
 
   app.get('/api/sheets/sync', async (req, res) => {
