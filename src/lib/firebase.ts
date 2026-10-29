@@ -189,34 +189,6 @@ export const googleSignIn = async (): Promise<SignInResult> => {
   }
 };
 
-/**
- * Direct Email Sign In
- * Allows any user to authenticate with their email address without restrictions.
- */
-export const emailSignIn = (
-  email: string,
-  displayName?: string
-): SignInResult => {
-  const cleanEmail = (email || '').trim().toLowerCase();
-  const name = displayName?.trim() || cleanEmail.split('@')[0] || 'User';
-  const safeSeed = encodeURIComponent(name);
-  return {
-    user: {
-      uid: 'user_' + btoa(cleanEmail || 'anonymous').replace(/[^a-zA-Z0-9]/g, '').slice(0, 24),
-      email: cleanEmail,
-      displayName: name,
-      photoURL: `https://api.dicebear.com/7.x/initials/svg?seed=${safeSeed}&backgroundColor=4f46e5&textColor=ffffff`,
-    },
-    accessToken: null,
-    isLocalFallback: true,
-  };
-};
-
-export const quickLocalSignIn = (
-  email = 'user@example.com',
-  displayName = 'User'
-): SignInResult => emailSignIn(email, displayName);
-
 export const getAccessToken = (): string | null => cachedAccessToken;
 
 export const logout = async () => {
