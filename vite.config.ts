@@ -10,24 +10,15 @@ export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
     build: {
-      rolldownOptions: {
+      rollupOptions: {
         output: {
-          codeSplitting: {
-            groups: [
-              {
-                debugName: 'vendor-dependencies',
-                name: (id) => {
-                  const packagePath = id.split('node_modules/').pop();
-                  if (!id.includes('node_modules/') || !packagePath) return null;
-                  const parts = packagePath.split('/');
-                  const packageName = parts[0].startsWith('@') ? `${parts[0]}-${parts[1]}` : parts[0];
-                  return `vendor-${packageName.replace('@', '').replace(/[^a-zA-Z0-9_-]/g, '-')}`;
-                },
-                test: /node_modules/,
-                minSize: 40_000,
-                maxSize: 450_000,
-              },
-            ],
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('react') || id.includes('react-dom')) return 'vendor-react';
+              if (id.includes('lucide-react')) return 'vendor-lucide';
+              if (id.includes('motion')) return 'vendor-motion';
+              if (id.includes('firebase')) return 'vendor-firebase';
+            }
           },
         },
       },
