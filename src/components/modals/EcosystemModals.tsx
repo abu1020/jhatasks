@@ -24,18 +24,24 @@ import {
   Upload,
   Video,
 } from 'lucide-react';
-import type { Attachment, Task } from '../../db/schema';
+import { isSafeExternalUrl, type Attachment, type Task } from '../../db/schema';
 import { formatHumanDate, formatTime12h, getTodayStr } from '../../lib/dateUtils';
-import { safeExternalUrl } from '../../lib/safeUrl';
-import {
-  createGoogleTaskLive,
-  deleteGoogleTaskLive,
-  fetchGmailNotificationsLive,
-  fetchGoogleDriveRecentFiles,
-  fetchGoogleTasksLive,
-  googleSignIn,
-  pullTasksFromGoogleSheet,
-} from '../../lib/firebase';
+type FirebaseModule = typeof import('../../lib/firebase');
+const loadFirebase = () => import('../../lib/firebase');
+const createGoogleTaskLive: FirebaseModule['createGoogleTaskLive'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.createGoogleTaskLive(...args));
+const deleteGoogleTaskLive: FirebaseModule['deleteGoogleTaskLive'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.deleteGoogleTaskLive(...args));
+const fetchGmailNotificationsLive: FirebaseModule['fetchGmailNotificationsLive'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.fetchGmailNotificationsLive(...args));
+const fetchGoogleDriveRecentFiles: FirebaseModule['fetchGoogleDriveRecentFiles'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.fetchGoogleDriveRecentFiles(...args));
+const fetchGoogleTasksLive: FirebaseModule['fetchGoogleTasksLive'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.fetchGoogleTasksLive(...args));
+const googleSignIn: FirebaseModule['googleSignIn'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.googleSignIn(...args));
+const pullTasksFromGoogleSheet: FirebaseModule['pullTasksFromGoogleSheet'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.pullTasksFromGoogleSheet(...args));
 import {
   extractOtpFromText,
   parseGoogleTasksV1Json,
@@ -344,9 +350,9 @@ export function CalendarEventDetailModal() {
           </div>
 
           <div className="flex items-center justify-between gap-2 pt-1">
-            {safeExternalUrl(ev.meet_link) ? (
+            {isSafeExternalUrl(ev.meet_link) ? (
               <a
-                href={safeExternalUrl(ev.meet_link)!}
+                href={ev.meet_link}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn-accent px-4 py-2.5 rounded-xl text-xs font-semibold inline-flex items-center gap-2 min-h-[40px]"
@@ -393,6 +399,7 @@ export function EcosystemModals() {
   const notifications = useCadenceStore((s) => s.notifications);
   const ingestGmailNotifications = useCadenceStore((s) => s.ingestGmailNotifications);
   const userEmail = useCadenceStore((s) => s.userEmail);
+  const userUid = useCadenceStore((s) => s.userUid);
   const setAuthUser = useCadenceStore((s) => s.setAuthUser);
 
   const [driveFiles, setDriveFiles] = useState<Attachment[]>([]);
@@ -400,6 +407,8 @@ export function EcosystemModals() {
   const [jsonInput, setJsonInput] = useState('');
   const [copiedOtp, setCopiedOtp] = useState<string | null>(null);
   const [copiedTsv, setCopiedTsv] = useState(false);
+  const [liveFeedUrl, setLiveFeedUrl] = useState('');
+  const [creatingFeedLink, setCreatingFeedLink] = useState(false);
   const [remoteGTasks, setRemoteGTasks] = useState<Array<{ id: string; title: string; status: string; due?: string }>>([]);
   const [pendingRemoteConfirm, setPendingRemoteConfirm] = useState<
     | { type: 'push_all' }
@@ -679,6 +688,33 @@ export function EcosystemModals() {
       setTimeout(() => setCopiedTsv(false), 2000);
     } catch {
       addToast({ message: 'Failed to copy to clipboard', tone: 'warning' });
+    }
+  };
+
+  const handleCreateLiveFeedLink = async () => {
+    setCreatingFeedLink(true);
+    try {
+      const response = await fetch('/api/tasks/sheets-feed-token', {
+        method: 'POST',
+        headers: userUid ? { 'X-Cadence-User': userUid } : {},
+      });
+      if (!response.ok) throw new Error('Unable to create a live feed link');
+      const data: { path: string; expiresAt: number } = await response.json();
+      const url = new URL(data.path, window.location.origin).toString();
+      setLiveFeedUrl(url);
+      try {
+        await navigator.clipboard.writeText(url);
+        addToast({ message: 'Read-only feed link copied. It expires in 7 days.', tone: 'success' });
+      } catch {
+        addToast({ message: 'Feed link created. Copy it from the field below.', tone: 'info' });
+      }
+    } catch (error) {
+      addToast({
+        message: error instanceof Error ? error.message : 'Could not create feed link',
+        tone: 'warning',
+      });
+    } finally {
+      setCreatingFeedLink(false);
     }
   };
 
@@ -1078,8 +1114,35 @@ export function EcosystemModals() {
                   <Download className="w-3.5 h-3.5" />
                   <span>Download .CSV</span>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => void handleCreateLiveFeedLink()}
+                  disabled={creatingFeedLink}
+                  className="btn-ghost px-3 py-1.5 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 disabled:opacity-60"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>{creatingFeedLink ? 'Creating link…' : 'Copy live feed link'}</span>
+                </button>
               </div>
             </div>
+            {liveFeedUrl && (
+              <div className="space-y-1.5">
+                <label htmlFor="cadence-live-feed-url" className="block text-[10px] font-semibold text-[var(--text-2)]">
+                  Read-only link for Google Sheets IMPORTDATA
+                </label>
+                <input
+                  id="cadence-live-feed-url"
+                  readOnly
+                  value={liveFeedUrl}
+                  onFocus={(event) => event.currentTarget.select()}
+                  className="input-base w-full px-3 py-2 rounded-lg text-[10px]"
+                  aria-describedby="cadence-live-feed-warning"
+                />
+                <p id="cadence-live-feed-warning" className="text-[10px] leading-relaxed text-[var(--text-3)]">
+                  Anyone with this link can read your task export until it expires in 7 days. Creating a new link revokes the previous one.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Section 3: Live Google Tasks API Sync (with mandatory confirmation before remote mutation/deletion) */}

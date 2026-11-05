@@ -22,6 +22,7 @@ import {
   WorkspaceDot,
   type SelectOption,
 } from '../ui/Primitives';
+import { EcosystemSyncToolbar } from '../ui/EcosystemSyncToolbar';
 
 const GROUP_OPTIONS: SelectOption<ListGroupBy>[] = [
   { value: 'priority', label: 'Group: Priority' },
@@ -246,6 +247,7 @@ export function ListView() {
 
   return (
     <div className="space-y-4">
+      <EcosystemSyncToolbar />
       <GlobalFilterBar matchCount={filteredTasks.length} />
 
       {/* Toolbar */}

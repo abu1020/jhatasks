@@ -13,6 +13,14 @@ import type {
 import { computeAutoSchedulePlan, getTodayStr, nextRecurrenceDate } from '../lib/dateUtils';
 import { classifyGmailMessage, type GmailNotificationItem } from '../lib/nlpParser';
 import { playCompletionChime, playTimerCompleteChime } from '../lib/soundAndParticles';
+type FirebaseModule = typeof import('../lib/firebase');
+const loadFirebase = () => import('../lib/firebase');
+const createTasksInFirestore: FirebaseModule['createTasksInFirestore'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.createTasksInFirestore(...args));
+const removeTaskFromFirestore: FirebaseModule['removeTaskFromFirestore'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.removeTaskFromFirestore(...args));
+const updateTaskInFirestore: FirebaseModule['updateTaskInFirestore'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.updateTaskInFirestore(...args));
 
 export type ListGroupBy = 'priority' | 'due_date' | 'status';
 export type ListSortBy = 'priority' | 'due_date' | 'title' | 'newest';
@@ -56,6 +64,16 @@ export interface FocusTimerState {
   secondsLeft: number;
   running: boolean;
   completedFocusSession: boolean;
+}
+
+export type CustomizationPlanId = 'free' | 'monthly_99' | 'yearly_499' | 'lifetime_3999';
+
+export interface CustomizationConfig {
+  organizationName: string;
+  focusDurationMinutes: number;
+  breakDurationMinutes: number;
+  customSheetName: string;
+  customRequirements: string;
 }
 
 interface CadenceState {
@@ -106,11 +124,19 @@ interface CadenceState {
   shakingColumn: TaskStatus | null;
   lastDragEndAt: number;
   activeModal: 'gmail' | 'drive' | 'shortcuts' | 'tasks_io' | null;
+  showLandingPage: boolean;
+  customizationPlan: CustomizationPlanId;
+  customizationConfig: CustomizationConfig;
 
   // Global Focus Timer
   focusTimer: FocusTimerState;
 
   // Actions
+  setShowLandingPage: (show: boolean) => void;
+  updateCustomizationPlan: (
+    plan: CustomizationPlanId,
+    config?: Partial<CustomizationConfig>
+  ) => void;
   setAuthUser: (user: {
     uid: string | null;
     email: string | null;
@@ -197,55 +223,18 @@ interface CadenceState {
 const pendingPatches = new Map<string, Partial<Task>>();
 const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const pendingDeleteTimers = new Map<string, ReturnType<typeof setTimeout>>();
+let hydrationGeneration = 0;
 
-let sheetSyncTimer: ReturnType<typeof setTimeout> | null = null;
-let sheetSyncInFlight = false;
-let sheetSyncShowToast = false;
-let sheetSyncRunner: ((showToast: boolean) => Promise<number>) | null = null;
-let sheetSyncResolvers: Array<(count: number) => void> = [];
-
-function scheduleSheetSyncFlush() {
-  if (sheetSyncTimer || !sheetSyncRunner) return;
-  sheetSyncTimer = setTimeout(async () => {
-    sheetSyncTimer = null;
-    if (sheetSyncInFlight) return;
-
-    const run = sheetSyncRunner;
-    if (!run) return;
-    const notify = sheetSyncShowToast;
-    const resolvers = sheetSyncResolvers.splice(0);
-    sheetSyncRunner = null;
-    sheetSyncShowToast = false;
-    sheetSyncInFlight = true;
-    let count = 0;
-    try {
-      count = await run(notify);
-    } catch {
-      count = 0;
-    } finally {
-      sheetSyncInFlight = false;
-      resolvers.forEach((resolve) => resolve(count));
-      if (sheetSyncResolvers.length > 0) scheduleSheetSyncFlush();
-    }
-  }, 400);
-}
-
-function queueSheetSync(
-  run: (showToast: boolean) => Promise<number>,
-  showToast: boolean
-): Promise<number> {
-  sheetSyncRunner = run;
-  sheetSyncShowToast ||= showToast;
-  const result = new Promise<number>((resolve) => sheetSyncResolvers.push(resolve));
-  if (sheetSyncTimer) clearTimeout(sheetSyncTimer);
-  sheetSyncTimer = null;
-  scheduleSheetSyncFlush();
-  return result;
+async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers);
+  const uid = useCadenceStore.getState().userUid;
+  if (uid) headers.set('X-Cadence-User', uid);
+  return fetch(input, { ...init, headers });
 }
 
 async function sendPatchWithRetry(id: string, patch: Partial<Task>): Promise<boolean> {
   const attempt = async () => {
-    const res = await fetch(`/api/tasks/${encodeURIComponent(id)}`, {
+    const res = await apiFetch(`/api/tasks/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
@@ -321,6 +310,15 @@ export const useCadenceStore = create<CadenceState>()(
       shakingColumn: null,
       lastDragEndAt: 0,
       activeModal: null,
+      showLandingPage: true,
+      customizationPlan: 'free',
+      customizationConfig: {
+        organizationName: '',
+        focusDurationMinutes: 25,
+        breakDurationMinutes: 5,
+        customSheetName: 'Cadence Master Tasks',
+        customRequirements: '',
+      },
 
       focusTimer: {
         taskId: null,
@@ -330,28 +328,58 @@ export const useCadenceStore = create<CadenceState>()(
         completedFocusSession: false,
       },
 
+      setShowLandingPage: (showLandingPage) => set({ showLandingPage }),
+
+      updateCustomizationPlan: (plan, config) =>
+        set((state) => {
+          const nextConfig = {
+            ...state.customizationConfig,
+            ...(config || {}),
+          };
+          return {
+            customizationPlan: plan,
+            customizationConfig: nextConfig,
+          };
+        }),
+
       setAuthUser: (user) =>
-        set({
-          userUid: user.uid,
-          userEmail: user.email,
-          userName: user.name,
-          userPhoto: user.photo,
-          hasGoogleToken: user.hasToken,
+        set((state) => {
+          const identityChanged = state.userUid !== user.uid;
+          if (identityChanged) {
+            hydrationGeneration += 1;
+            for (const timer of debounceTimers.values()) clearTimeout(timer);
+            for (const timer of pendingDeleteTimers.values()) clearTimeout(timer);
+            debounceTimers.clear();
+            pendingDeleteTimers.clear();
+            pendingPatches.clear();
+          }
+          return {
+            userUid: user.uid,
+            userEmail: user.email,
+            userName: user.name,
+            userPhoto: user.photo,
+            hasGoogleToken: user.hasToken,
+            ...(identityChanged ? { tasks: [], events: [], hydrated: false, loading: false } : {}),
+          };
         }),
 
       hydrateFromApi: async () => {
         if (get().hydrated) return;
+        const generation = ++hydrationGeneration;
+        const requestedUid = get().userUid;
         set({ loading: true });
         try {
-          const res = await fetch('/api/tasks');
+          const res = await apiFetch('/api/tasks');
           if (!res.ok) throw new Error('Failed to fetch /api/tasks');
           const data: { tasks: Task[]; events: CalendarEvent[] } = await res.json();
+          if (generation !== hydrationGeneration || requestedUid !== get().userUid) return;
           let events = Array.isArray(data.events) ? data.events : [];
           const tasks = Array.isArray(data.tasks) ? data.tasks : [];
 
           // HYDRATION RULE: if events are empty call /api/seed; tasks must start EMPTY
           if (events.length === 0) {
-            const seedRes = await fetch('/api/seed', { method: 'POST' });
+            const seedRes = await apiFetch('/api/seed', { method: 'POST' });
+            if (generation !== hydrationGeneration || requestedUid !== get().userUid) return;
             if (seedRes.ok) {
               const seedData = await seedRes.json();
               if (Array.isArray(seedData.events)) {
@@ -367,7 +395,9 @@ export const useCadenceStore = create<CadenceState>()(
             loading: false,
           });
         } catch {
-          set({ hydrated: true, loading: false });
+          if (generation === hydrationGeneration && requestedUid === get().userUid) {
+            set({ hydrated: true, loading: false });
+          }
         }
       },
 
@@ -401,7 +431,7 @@ export const useCadenceStore = create<CadenceState>()(
           const next = order[(order.indexOf(s.workspace) + 1) % order.length];
           return { workspace: next };
         }),
-      setActiveView: (activeView) => set({ activeView }),
+      setActiveView: (activeView) => set({ activeView, showLandingPage: false }),
       setCalendarMode: (calendarMode) => set({ calendarMode }),
       setCalendarDate: (calendarDate) => set({ calendarDate }),
       setListGroupBy: (listGroupBy) => set({ listGroupBy }),
@@ -410,37 +440,36 @@ export const useCadenceStore = create<CadenceState>()(
       setLinkedSpreadsheetId: (linkedSpreadsheetId) => set({ linkedSpreadsheetId }),
       setAutoSyncSheets: (autoSyncSheets) => set({ autoSyncSheets }),
 
-      syncTasksWithGoogleSheets: (showToast = false) =>
-        queueSheetSync(async (notify) => {
-          // Snapshot at flush time so bursts of edits become one latest-state write.
-          const state = get();
-          try {
-            const res = await fetch('/api/sheets/sync', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                tasks: state.tasks,
-                spreadsheetId: state.linkedSpreadsheetId || 'cadence-master-tasks-sheet',
-              }),
-              keepalive: true,
-            });
-            if (res.ok) {
-              const data = await res.json();
-              set({ lastSheetSyncedAt: data.lastSyncedAt || new Date().toISOString() });
-              if (notify) {
-                get().addToast({
-                  message: `Synced all ${state.tasks.length} tasks with Google Sheets`,
-                  tone: 'success',
-                });
-              }
-              return state.tasks.length;
+      syncTasksWithGoogleSheets: async (showToast = false) => {
+        const state = get();
+        try {
+          const res = await apiFetch('/api/sheets/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tasks: state.tasks,
+              spreadsheetId: state.linkedSpreadsheetId || 'cadence-master-tasks-sheet',
+            }),
+            keepalive: true,
+          });
+          if (res.ok) {
+            const data = await res.json();
+            set({ lastSheetSyncedAt: data.lastSyncedAt || new Date().toISOString() });
+            if (showToast) {
+              get().addToast({
+                message: `Synced all ${state.tasks.length} tasks with Google Sheets`,
+                tone: 'success',
+              });
             }
-          } catch {
-            // Keep local edits responsive when the optional sync endpoint is unavailable.
+            return state.tasks.length;
           }
-          set({ lastSheetSyncedAt: new Date().toISOString() });
-          return state.tasks.length;
-        }, showToast),
+        } catch {
+          // Ignore transient network errors during background sheet sync
+        }
+        const now = new Date().toISOString();
+        set({ lastSheetSyncedAt: now });
+        return state.tasks.length;
+      },
 
       setNavOpen: (navOpen) => set({ navOpen }),
       toggleNav: () => set((s) => ({ navOpen: !s.navOpen })),
@@ -764,7 +793,7 @@ export const useCadenceStore = create<CadenceState>()(
         }));
 
         try {
-          const res = await fetch('/api/tasks', {
+          const res = await apiFetch('/api/tasks', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ tasks: [newTask] }),
@@ -779,7 +808,7 @@ export const useCadenceStore = create<CadenceState>()(
         }
 
         if (state.userUid) {
-          void import('../lib/firebase').then(({ createTasksInFirestore }) => createTasksInFirestore([newTask], state.userUid!));
+          void createTasksInFirestore([newTask], state.userUid);
         }
         if (get().autoSyncSheets) {
           void get().syncTasksWithGoogleSheets();
@@ -798,7 +827,7 @@ export const useCadenceStore = create<CadenceState>()(
           return { tasks: Array.from(byId.values()) };
         });
         try {
-          await fetch('/api/tasks', {
+          await apiFetch('/api/tasks', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ tasks: newTasks }),
@@ -812,7 +841,7 @@ export const useCadenceStore = create<CadenceState>()(
         }
         const uid = get().userUid;
         if (uid) {
-          void import('../lib/firebase').then(({ createTasksInFirestore }) => createTasksInFirestore(newTasks, uid));
+          void createTasksInFirestore(newTasks, uid);
         }
         if (get().autoSyncSheets) {
           void get().syncTasksWithGoogleSheets();
@@ -886,14 +915,14 @@ export const useCadenceStore = create<CadenceState>()(
             message: `Scheduled next recurring instance for ${clone.due_date}`,
             tone: 'success',
           });
-          void fetch('/api/tasks', {
+          void apiFetch('/api/tasks', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ tasks: [clone] }),
             keepalive: true,
           });
           if (state.userUid) {
-            void import('../lib/firebase').then(({ createTasksInFirestore }) => createTasksInFirestore([clone], state.userUid!));
+            void createTasksInFirestore([clone], state.userUid);
           }
         }
 
@@ -921,7 +950,7 @@ export const useCadenceStore = create<CadenceState>()(
           const uid = get().userUid;
           const latestTask = get().tasks.find((t) => t.id === id);
           if (uid && latestTask) {
-            void import('../lib/firebase').then(({ updateTaskInFirestore }) => updateTaskInFirestore(latestTask, uid));
+            void updateTaskInFirestore(latestTask, uid);
           }
           if (get().autoSyncSheets) {
             void get().syncTasksWithGoogleSheets();
@@ -952,7 +981,7 @@ export const useCadenceStore = create<CadenceState>()(
         const deleteTimer = setTimeout(async () => {
           pendingDeleteTimers.delete(id);
           try {
-            await fetch(`/api/tasks/${encodeURIComponent(id)}`, {
+            await apiFetch(`/api/tasks/${encodeURIComponent(id)}`, {
               method: 'DELETE',
               keepalive: true,
             });
@@ -961,7 +990,7 @@ export const useCadenceStore = create<CadenceState>()(
           }
           const uid = get().userUid;
           if (uid) {
-            void import('../lib/firebase').then(({ removeTaskFromFirestore }) => removeTaskFromFirestore(id, uid));
+            void removeTaskFromFirestore(id, uid);
           }
           if (get().autoSyncSheets) {
             void get().syncTasksWithGoogleSheets();
@@ -1034,11 +1063,14 @@ export const useCadenceStore = create<CadenceState>()(
       },
 
       startFocusTimer: (taskId, mode = 'focus') => {
+        const cfg = get().customizationConfig;
+        const focusMins = cfg?.focusDurationMinutes || 25;
+        const breakMins = cfg?.breakDurationMinutes || 5;
         set({
           focusTimer: {
             taskId,
             mode,
-            secondsLeft: mode === 'focus' ? 25 * 60 : 5 * 60,
+            secondsLeft: mode === 'focus' ? focusMins * 60 : breakMins * 60,
             running: true,
             completedFocusSession: false,
           },
@@ -1138,6 +1170,8 @@ export const useCadenceStore = create<CadenceState>()(
         wipLimits: state.wipLimits,
         linkedSpreadsheetId: state.linkedSpreadsheetId,
         autoSyncSheets: state.autoSyncSheets,
+        customizationPlan: state.customizationPlan,
+        customizationConfig: state.customizationConfig,
       }),
     }
   )

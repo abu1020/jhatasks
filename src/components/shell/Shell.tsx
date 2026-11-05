@@ -8,6 +8,7 @@ import {
   Calendar as CalendarIcon,
   Check,
   CheckCheck,
+  CheckSquare,
   ChevronLeft,
   ChevronRight,
   Command,
@@ -40,14 +41,26 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import type { ViewId, WorkspaceFilter } from '../../db/schema';
+import type { Task, ViewId, WorkspaceFilter } from '../../db/schema';
 import { computeTodayProgress, getTodayStr } from '../../lib/dateUtils';
+type FirebaseModule = typeof import('../../lib/firebase');
+const loadFirebase = () => import('../../lib/firebase');
+const fetchFirestoreUserTasksAndEvents: FirebaseModule['fetchFirestoreUserTasksAndEvents'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.fetchFirestoreUserTasksAndEvents(...args));
+const fetchGmailNotificationsLive: FirebaseModule['fetchGmailNotificationsLive'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.fetchGmailNotificationsLive(...args));
+const fetchGoogleCalendarLiveEvents: FirebaseModule['fetchGoogleCalendarLiveEvents'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.fetchGoogleCalendarLiveEvents(...args));
+const fetchGoogleTasksLive: FirebaseModule['fetchGoogleTasksLive'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.fetchGoogleTasksLive(...args));
+const googleSignIn: FirebaseModule['googleSignIn'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.googleSignIn(...args));
+const logout: FirebaseModule['logout'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.logout(...args));
 import { parseGoogleTasksV1Json, type GmailNotificationItem } from '../../lib/nlpParser';
 import { useCadenceStore } from '../../store/useCadenceStore';
 import { ProgressRing } from '../ui/Primitives';
-
-// Keep Firebase and Google integration code out of the initial shell bundle.
-const loadFirebase = () => import('../../lib/firebase');
+import { BrandMark } from '../ui/Brand';
 
 export const VIEW_CONFIG: {
   id: ViewId;
@@ -72,47 +85,63 @@ export function GoogleSignInButton({
   onSuccess?: () => void;
 }) {
   const setAuthUser = useCadenceStore((s) => s.setAuthUser);
+  const setShowLandingPage = useCadenceStore((s) => s.setShowLandingPage);
+  const setActiveView = useCadenceStore((s) => s.setActiveView);
   const mergeExternalTasks = useCadenceStore((s) => s.mergeExternalTasks);
   const mergeExternalEvents = useCadenceStore((s) => s.mergeExternalEvents);
   const ingestGmailNotifications = useCadenceStore((s) => s.ingestGmailNotifications);
   const addToast = useCadenceStore((s) => s.addToast);
   const [busy, setBusy] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  const applyAuthResult = (res: {
+    user: { uid: string; email: string | null; displayName: string | null; photoURL: string | null };
+    accessToken: string | null;
+  }) => {
+    setAuthUser({
+      uid: res.user.uid,
+      email: res.user.email,
+      name: res.user.displayName,
+      photo: res.user.photoURL,
+      hasToken: Boolean(res.accessToken),
+    });
+    // Immediately unlock full software workspace
+    setShowLandingPage(false);
+    setActiveView('my_day');
+
+    addToast({
+      message: `Signed in as ${res.user.displayName || res.user.email}. Google account authenticated!`,
+      tone: 'success',
+    });
+    if (res.accessToken && res.user.email) {
+      fetchGmailNotificationsLive(res.user.email)
+        .then((items) => {
+          ingestGmailNotifications(items, { forceToastNewest: true });
+        })
+        .catch(() => {});
+    }
+    fetchFirestoreUserTasksAndEvents(res.user.uid)
+      .then((cloudData) => {
+        if (cloudData.tasks.length > 0) mergeExternalTasks(cloudData.tasks);
+        if (cloudData.events.length > 0) mergeExternalEvents(cloudData.events);
+      })
+      .catch(() => {});
+    onSuccess?.();
+  };
 
   const handleSignIn = async () => {
     setBusy(true);
+    setAuthError(null);
     try {
-      const { googleSignIn } = await loadFirebase();
       const res = await googleSignIn();
-      setAuthUser({
-        uid: res.user.uid,
-        email: res.user.email,
-        name: res.user.displayName,
-        photo: res.user.photoURL,
-        hasToken: Boolean(res.accessToken),
-      });
-      addToast({
-        message: `Signed in as ${res.user.displayName || res.user.email}`,
-        tone: 'success',
-      });
-      if (res.accessToken) {
-        void loadFirebase().then(({ fetchGmailNotificationsLive }) => fetchGmailNotificationsLive(res.user.email))
-          .then((items) => {
-            ingestGmailNotifications(items, { forceToastNewest: true });
-          })
-          .catch(() => {});
-      }
-      void loadFirebase().then(({ fetchFirestoreUserTasksAndEvents }) => fetchFirestoreUserTasksAndEvents(res.user.uid))
-        .then((cloudData) => {
-          if (cloudData.tasks.length > 0) mergeExternalTasks(cloudData.tasks);
-          if (cloudData.events.length > 0) mergeExternalEvents(cloudData.events);
-        })
-        .catch(() => {});
-      onSuccess?.();
+      applyAuthResult(res);
     } catch (err: any) {
+      const msg = err?.message || 'Could not complete Google sign-in';
+      setAuthError(msg);
       addToast({
-        message: err?.message?.includes('popup')
-          ? 'Google sign-in popup was closed'
-          : 'Could not complete Google sign-in',
+        message: err?.isPopupBlocked
+          ? 'Browser blocked the Google sign-in popup. Please allow popups to log in.'
+          : msg,
         tone: 'warning',
       });
     } finally {
@@ -121,39 +150,47 @@ export function GoogleSignInButton({
   };
 
   return (
-    <button
-      type="button"
-      onClick={handleSignIn}
-      disabled={busy}
-      className={`gsi-material-button inline-flex items-center justify-center gap-2.5 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text-1)] hover:bg-[var(--surface-3)] transition font-medium whitespace-nowrap shrink-0 ${
-        compact ? 'px-3 py-2 text-xs min-h-[38px]' : 'w-full px-3.5 py-2.5 text-xs min-h-[40px]'
-      }`}
-    >
-      <svg
-        version="1.1"
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 48 48"
-        className="w-4 h-4 shrink-0"
+    <div className="space-y-2 w-full">
+      <button
+        type="button"
+        onClick={handleSignIn}
+        disabled={busy}
+        className={`gsi-material-button inline-flex items-center justify-center gap-2.5 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text-1)] hover:bg-[var(--surface-3)] transition font-medium whitespace-nowrap shrink-0 cursor-pointer ${
+          compact ? 'px-3 py-2 text-xs min-h-[38px]' : 'w-full px-3.5 py-2.5 text-xs min-h-[40px]'
+        }`}
       >
-        <path
-          fill="#EA4335"
-          d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
-        />
-        <path
-          fill="#4285F4"
-          d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
-        />
-        <path
-          fill="#FBBC05"
-          d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
-        />
-        <path
-          fill="#34A853"
-          d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
-        />
-      </svg>
-      <span>{busy ? 'Connecting...' : 'Sign in with Google'}</span>
-    </button>
+        <svg
+          version="1.1"
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 48 48"
+          className="w-4 h-4 shrink-0"
+        >
+          <path
+            fill="#EA4335"
+            d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+          />
+          <path
+            fill="#4285F4"
+            d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+          />
+          <path
+            fill="#FBBC05"
+            d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+          />
+          <path
+            fill="#34A853"
+            d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+          />
+        </svg>
+        <span>{busy ? 'Connecting to Google...' : 'Sign in with Google Account'}</span>
+      </button>
+
+      {authError && (
+        <p className="text-[11px] text-[#F43F5E] px-1 leading-snug">
+          {authError}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -282,29 +319,18 @@ function NotificationsPopover({
     const vw = window.innerWidth;
     const width = Math.min(356, vw - 16);
     const left = Math.max(8, Math.min(rect.right - width, vw - width - 8));
-    const top = Math.max(8, Math.min(rect.bottom + 8, window.innerHeight - 460));
-    setCoords((current) => current.top === top && current.left === left && current.width === width
-      ? current
-      : { top, left, width });
+    const top = Math.min(rect.bottom + 8, window.innerHeight - 460);
+    setCoords({ top: Math.max(8, top), left, width });
   };
 
   useLayoutEffect(() => {
     if (!notificationsOpen) return;
-    let frame = 0;
-    const schedulePosition = () => {
-      if (frame) return;
-      frame = requestAnimationFrame(() => {
-        frame = 0;
-        updatePos();
-      });
-    };
-    schedulePosition();
-    window.addEventListener('resize', schedulePosition);
-    window.addEventListener('scroll', schedulePosition, true);
+    updatePos();
+    window.addEventListener('resize', updatePos);
+    window.addEventListener('scroll', updatePos, true);
     return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener('resize', schedulePosition);
-      window.removeEventListener('scroll', schedulePosition, true);
+      window.removeEventListener('resize', updatePos);
+      window.removeEventListener('scroll', updatePos, true);
     };
   }, [notificationsOpen]);
 
@@ -332,7 +358,6 @@ function NotificationsPopover({
     setCheckingGmail(true);
     setGmailPollStatus('polling');
     try {
-      const { fetchGmailNotificationsLive } = await loadFirebase();
       const liveItems = await fetchGmailNotificationsLive(userEmail);
       const added = ingestGmailNotifications(liveItems, { forceToastNewest: true });
       if (added === 0 && liveItems.length > 0) {
@@ -350,7 +375,6 @@ function NotificationsPopover({
       if (err?.message === 'NEEDS_GOOGLE_AUTH') {
         setGmailPollStatus('needs_auth');
         try {
-          const { googleSignIn } = await loadFirebase();
           const res = await googleSignIn();
           setAuthUser({
             uid: res.user.uid,
@@ -360,7 +384,6 @@ function NotificationsPopover({
             hasToken: Boolean(res.accessToken),
           });
           if (res.accessToken) {
-            const { fetchGmailNotificationsLive } = await loadFirebase();
             const liveItems = await fetchGmailNotificationsLive(res.user.email);
             ingestGmailNotifications(liveItems, { forceToastNewest: true });
           }
@@ -611,6 +634,203 @@ function NotificationsPopover({
 }
 
 /**
+ * Dedicated 'Import Google Tasks' File Picker Component within the Settings Popover.
+ * Parses standard Google Tasks v1 JSON (`kind: "tasks#tasks"`, `tasks#taskLists`, or raw item arrays)
+ * and maps items (including parent/child subtasks, RFC3339 due timestamps, completion status,
+ * notes checklists, and links) directly to our internal Task schema.
+ */
+export function ImportGoogleTasksPicker({
+  onImported,
+}: {
+  onImported?: (tasks: Task[], fileName: string) => void;
+}) {
+  const tasks = useCadenceStore((s) => s.tasks);
+  const workspace = useCadenceStore((s) => s.workspace);
+  const importTasksBatch = useCadenceStore((s) => s.importTasksBatch);
+  const addToast = useCadenceStore((s) => s.addToast);
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [targetWorkspace, setTargetWorkspace] = useState<'office' | 'personal'>(
+    workspace === 'personal' ? 'personal' : 'office'
+  );
+  const [isDragging, setIsDragging] = useState(false);
+  const [isParsing, setIsParsing] = useState(false);
+  const [lastImportSummary, setLastImportSummary] = useState<{
+    fileName: string;
+    taskCount: number;
+    subtaskCount: number;
+  } | null>(null);
+
+  const processGoogleTasksFile = async (file: File) => {
+    setIsParsing(true);
+    try {
+      const rawJson = await file.text();
+      const maxOrder = tasks.reduce(
+        (m, t) => (t.sort_order > m ? t.sort_order : m),
+        0
+      );
+      const parsedTasks = parseGoogleTasksV1Json(rawJson, {
+        defaultWorkspace: targetWorkspace,
+        baseSortOrder: maxOrder,
+      });
+
+      if (parsedTasks.length === 0) {
+        addToast({
+          message: `No valid Google Tasks v1 items found in "${file.name}"`,
+          tone: 'warning',
+        });
+        return;
+      }
+
+      const subtaskCount = parsedTasks.reduce(
+        (acc, t) => acc + (t.subtasks?.length ?? 0),
+        0
+      );
+
+      await importTasksBatch(parsedTasks);
+      setLastImportSummary({
+        fileName: file.name,
+        taskCount: parsedTasks.length,
+        subtaskCount,
+      });
+      addToast({
+        message: `Imported ${parsedTasks.length} task${
+          parsedTasks.length > 1 ? 's' : ''
+        }${
+          subtaskCount > 0 ? ` (${subtaskCount} subtasks)` : ''
+        } from "${file.name}"`,
+        tone: 'success',
+      });
+      onImported?.(parsedTasks, file.name);
+    } catch {
+      addToast({
+        message: `Failed to parse "${file.name}". Expected Google Tasks v1 JSON format.`,
+        tone: 'danger',
+      });
+    } finally {
+      setIsParsing(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    void processGoogleTasksFile(file);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    void processGoogleTasksFile(file);
+  };
+
+  return (
+    <div
+      onDragOver={(e) => {
+        e.preventDefault();
+        setIsDragging(true);
+      }}
+      onDragLeave={() => setIsDragging(false)}
+      onDrop={handleDrop}
+      className={`rounded-xl border p-2.5 transition ${
+        isDragging
+          ? 'border-[var(--accent)] bg-[var(--accent-soft)]'
+          : 'border-[var(--border-strong)] bg-[var(--surface-1)]'
+      }`}
+    >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json,application/json"
+        aria-label="Import Google Tasks JSON file"
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
+      <div className="flex items-center justify-between gap-1.5 mb-2">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Upload className="w-3.5 h-3.5 text-[var(--accent)] shrink-0" />
+          <span className="text-xs font-semibold text-[var(--text-1)] whitespace-nowrap">
+            Import Google Tasks
+          </span>
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-[var(--accent)] border border-[var(--border)] whitespace-nowrap shrink-0">
+            v1
+          </span>
+        </div>
+
+        <div
+          className="inline-flex items-center rounded-lg bg-[var(--surface-2)] p-0.5 border border-[var(--border)] text-[10px] shrink-0"
+          role="group"
+          aria-label="Default workspace for imported Google Tasks"
+        >
+          <button
+            type="button"
+            onClick={() => setTargetWorkspace('office')}
+            className={`px-1.5 py-0.5 rounded-md font-semibold transition ${
+              targetWorkspace === 'office'
+                ? 'bg-[var(--accent)] text-white'
+                : 'text-[var(--text-3)] hover:text-[var(--text-1)]'
+            }`}
+          >
+            Office
+          </button>
+          <button
+            type="button"
+            onClick={() => setTargetWorkspace('personal')}
+            className={`px-1.5 py-0.5 rounded-md font-semibold transition ${
+              targetWorkspace === 'personal'
+                ? 'bg-[var(--accent)] text-white'
+                : 'text-[var(--text-3)] hover:text-[var(--text-1)]'
+            }`}
+          >
+            Personal
+          </button>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        disabled={isParsing}
+        onClick={() => fileInputRef.current?.click()}
+        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-[var(--text-1)] bg-[var(--accent-soft)] hover:opacity-95 border border-[var(--border)] transition"
+      >
+        <span className="inline-flex items-center gap-2 whitespace-nowrap">
+          <FileJson className="w-3.5 h-3.5 text-[var(--accent)] shrink-0" />
+          <span>
+            {isParsing
+              ? 'Parsing Google Tasks v1…'
+              : 'Select or drop Google Tasks .json'}
+          </span>
+        </span>
+        <span className="text-[10px] font-semibold text-[var(--accent)] shrink-0 ml-2">
+          Browse
+        </span>
+      </button>
+
+      {lastImportSummary && (
+        <div
+          role="status"
+          className="mt-1.5 flex items-center justify-between px-2 py-1 rounded-lg bg-[#10B981]/12 border border-[#10B981]/30 text-[11px] text-[#10B981]"
+        >
+          <span className="truncate font-medium">
+            Imported {lastImportSummary.taskCount} tasks
+            {lastImportSummary.subtaskCount > 0
+              ? ` (${lastImportSummary.subtaskCount} subtasks)`
+              : ''}{' '}
+            · {lastImportSummary.fileName}
+          </span>
+          <Check className="w-3.5 h-3.5 shrink-0 ml-1.5" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * Settings & Google Ecosystem Popover (clamped inside viewport even at 320px)
  */
 function SettingsPopover({
@@ -620,10 +840,10 @@ function SettingsPopover({
 }) {
   const settingsOpen = useCadenceStore((s) => s.settingsOpen);
   const setSettingsOpen = useCadenceStore((s) => s.setSettingsOpen);
+  const setShowLandingPage = useCadenceStore((s) => s.setShowLandingPage);
   const setActiveModal = useCadenceStore((s) => s.setActiveModal);
   const tasks = useCadenceStore((s) => s.tasks);
   const events = useCadenceStore((s) => s.events);
-  const workspace = useCadenceStore((s) => s.workspace);
   const importTasksBatch = useCadenceStore((s) => s.importTasksBatch);
   const syncTasksWithGoogleSheets = useCadenceStore((s) => s.syncTasksWithGoogleSheets);
   const autoSyncSheets = useCadenceStore((s) => s.autoSyncSheets);
@@ -635,8 +855,7 @@ function SettingsPopover({
   const setAuthUser = useCadenceStore((s) => s.setAuthUser);
 
   const popRef = useRef<HTMLDivElement | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [coords, setCoords] = useState({ top: 60, left: 16, width: 316 });
+  const [coords, setCoords] = useState({ top: 60, left: 16, width: 344 });
   const [syncingCal, setSyncingCal] = useState(false);
   const [syncingTasks, setSyncingTasks] = useState(false);
   const [syncingSheet, setSyncingSheet] = useState(false);
@@ -646,31 +865,20 @@ function SettingsPopover({
     if (!btn) return;
     const rect = btn.getBoundingClientRect();
     const vw = window.innerWidth;
-    const width = Math.min(324, vw - 16);
+    const width = Math.min(348, vw - 16);
     const left = Math.max(8, Math.min(rect.right - width, vw - width - 8));
-    const top = Math.max(8, Math.min(rect.bottom + 8, window.innerHeight - 480));
-    setCoords((current) => current.top === top && current.left === left && current.width === width
-      ? current
-      : { top, left, width });
+    const top = Math.min(rect.bottom + 8, window.innerHeight - 480);
+    setCoords({ top: Math.max(8, top), left, width });
   };
 
   useLayoutEffect(() => {
     if (!settingsOpen) return;
-    let frame = 0;
-    const schedulePosition = () => {
-      if (frame) return;
-      frame = requestAnimationFrame(() => {
-        frame = 0;
-        updatePos();
-      });
-    };
-    schedulePosition();
-    window.addEventListener('resize', schedulePosition);
-    window.addEventListener('scroll', schedulePosition, true);
+    updatePos();
+    window.addEventListener('resize', updatePos);
+    window.addEventListener('scroll', updatePos, true);
     return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener('resize', schedulePosition);
-      window.removeEventListener('scroll', schedulePosition, true);
+      window.removeEventListener('resize', updatePos);
+      window.removeEventListener('scroll', updatePos, true);
     };
   }, [settingsOpen]);
 
@@ -694,49 +902,6 @@ function SettingsPopover({
 
   if (!settingsOpen || typeof document === 'undefined') return null;
 
-  const handleFileImportGoogleTasksV1 = async (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-
-    try {
-      const text = await file.text();
-      const maxOrder = tasks.reduce(
-        (m, t) => (t.sort_order > m ? t.sort_order : m),
-        0
-      );
-      const defaultWs = workspace === 'personal' ? 'personal' : 'office';
-      const parsedTasks = parseGoogleTasksV1Json(text, {
-        defaultWorkspace: defaultWs,
-        baseSortOrder: maxOrder,
-      });
-
-      if (parsedTasks.length === 0) {
-        addToast({
-          message: `No valid Google Tasks v1 items found in "${file.name}"`,
-          tone: 'warning',
-        });
-        return;
-      }
-
-      await importTasksBatch(parsedTasks);
-      addToast({
-        message: `Imported ${parsedTasks.length} task${
-          parsedTasks.length > 1 ? 's' : ''
-        } from "${file.name}" & synced to Google Sheets`,
-        tone: 'success',
-      });
-      setSettingsOpen(false);
-    } catch {
-      addToast({
-        message: `Failed to parse "${file.name}". Expected Google Tasks v1 JSON format.`,
-        tone: 'danger',
-      });
-    }
-  };
-
   const handlePullLiveGoogleTasks = async () => {
     setSyncingTasks(true);
     try {
@@ -744,7 +909,6 @@ function SettingsPopover({
         (m, t) => (t.sort_order > m ? t.sort_order : m),
         0
       );
-      const { fetchGoogleTasksLive } = await loadFirebase();
       const pulled = await fetchGoogleTasksLive('@default', maxOrder);
       if (pulled.length > 0) {
         await importTasksBatch(pulled);
@@ -793,7 +957,6 @@ function SettingsPopover({
   const handleSyncCalendar = async () => {
     setSyncingCal(true);
     try {
-      const { fetchGoogleCalendarLiveEvents } = await loadFirebase();
       const liveEvents = await fetchGoogleCalendarLiveEvents();
       mergeExternalEvents(liveEvents);
       addToast({
@@ -803,7 +966,6 @@ function SettingsPopover({
     } catch (err: any) {
       if (err?.message === 'NEEDS_GOOGLE_AUTH') {
         try {
-          const { googleSignIn } = await loadFirebase();
           const res = await googleSignIn();
           setAuthUser({
             uid: res.user.uid,
@@ -812,7 +974,6 @@ function SettingsPopover({
             photo: res.user.photoURL,
             hasToken: Boolean(res.accessToken),
           });
-          const { fetchGoogleCalendarLiveEvents } = await loadFirebase();
           const liveEvents = await fetchGoogleCalendarLiveEvents();
           mergeExternalEvents(liveEvents);
           addToast({
@@ -871,15 +1032,6 @@ function SettingsPopover({
       }}
       className="popover-surface rounded-2xl p-3 space-y-2.5"
     >
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".json,application/json"
-        aria-label="Upload Google Tasks v1 JSON file"
-        onChange={(e) => void handleFileImportGoogleTasksV1(e)}
-        className="hidden"
-      />
-
       <div className="px-2 py-1 border-b border-[var(--border)]">
         <div className="text-xs font-semibold text-[var(--text-1)]">
           Google Workspace & Settings
@@ -901,7 +1053,6 @@ function SettingsPopover({
           <button
             type="button"
             onClick={async () => {
-              const { logout } = await loadFirebase();
               await logout();
               setAuthUser({ uid: null, email: null, name: null, photo: null, hasToken: false });
               addToast({ message: 'Signed out of Google account' });
@@ -915,21 +1066,9 @@ function SettingsPopover({
         </div>
       )}
 
-      <div className="space-y-1">
-        {/* Direct Google Tasks v1 JSON File Import in Settings Popover */}
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold text-[var(--text-1)] bg-[var(--accent-soft)] hover:opacity-95 border border-[var(--border-strong)] transition"
-        >
-          <span className="inline-flex items-center gap-2.5">
-            <Upload className="w-4 h-4 text-[var(--accent)]" />
-            <span>Import Google Tasks JSON (.json)</span>
-          </span>
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[var(--surface-2)] text-[var(--accent)]">
-            v1 File
-          </span>
-        </button>
+      <div className="space-y-1.5">
+        {/* Dedicated 'Import Google Tasks' File Picker Component */}
+        <ImportGoogleTasksPicker />
 
         {/* Google Tasks API Live Sync + Hub */}
         <button
@@ -1043,6 +1182,23 @@ function SettingsPopover({
 
         <button
           type="button"
+          onClick={() => {
+            setSettingsOpen(false);
+            setShowLandingPage(true);
+          }}
+          className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-3)] hover:text-[var(--text-1)] transition"
+        >
+          <span className="inline-flex items-center gap-2.5">
+            <Sparkles className="w-4 h-4 text-[var(--accent)]" />
+            <span>Website, Features & Pricing</span>
+          </span>
+          <span className="text-[11px] text-[var(--accent)] font-semibold tnum">
+            ₹0 / ₹99+
+          </span>
+        </button>
+
+        <button
+          type="button"
           onClick={handleBackupJson}
           className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-medium text-[var(--text-2)] hover:bg-[var(--surface-3)] hover:text-[var(--text-1)] transition"
         >
@@ -1051,6 +1207,15 @@ function SettingsPopover({
             <span>Backup All Data (JSON)</span>
           </span>
         </button>
+
+        <div className="pt-2 border-t border-[var(--border)] text-center space-y-0.5">
+          <p className="text-[10px] text-[var(--text-3)] font-medium">
+            Cadence Professional Release
+          </p>
+          <p className="text-[10px] text-[var(--text-2)] font-semibold">
+            Product Developed & Distributed by Jha Solutions
+          </p>
+        </div>
       </div>
     </div>,
     document.body
@@ -1085,6 +1250,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const openComposer = useCadenceStore((s) => s.openComposer);
   const userName = useCadenceStore((s) => s.userName);
   const userEmail = useCadenceStore((s) => s.userEmail);
+  const setShowLandingPage = useCadenceStore((s) => s.setShowLandingPage);
+  const setActiveModal = useCadenceStore((s) => s.setActiveModal);
 
   const setGmailPollStatus = useCadenceStore((s) => s.setGmailPollStatus);
   const setAuthUser = useCadenceStore((s) => s.setAuthUser);
@@ -1092,18 +1259,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const settingsBtnRef = useRef<HTMLButtonElement | null>(null);
   const notifBtnRef = useRef<HTMLButtonElement | null>(null);
 
+  // Mail contents, including OTPs, stay client-side; the API deliberately does not cache them.
   // Real-time Gmail polling loop every 15s + on window focus/visibility when signed in with Google OAuth token
   useEffect(() => {
     if (!hasGoogleToken) return;
     let cancelled = false;
-    let polling = false;
+    let pollInFlight = false;
 
     const poll = async () => {
-      if (cancelled || polling) return;
-      polling = true;
+      if (cancelled || pollInFlight) return;
+      pollInFlight = true;
       setGmailPollStatus('polling');
       try {
-        const { fetchGmailNotificationsLive } = await loadFirebase();
         const items = await fetchGmailNotificationsLive(userEmail);
         if (!cancelled) {
           ingestGmailNotifications(items);
@@ -1125,7 +1292,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           }
         }
       } finally {
-        polling = false;
+        pollInFlight = false;
       }
     };
 
@@ -1153,13 +1320,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [hasGoogleToken, userEmail, ingestGmailNotifications, setGmailPollStatus, setAuthUser]);
 
   const unreadNotifCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
-  const hasUnreadOtp = useMemo(() => notifications.some((n) => !n.read && n.category === 'otp'), [notifications]);
-
+  const hasUnreadOtp = useMemo(
+    () => notifications.some((n) => !n.read && n.category === 'otp'),
+    [notifications]
+  );
   const scopedTasks = useMemo(
     () => tasks.filter((task) => workspace === 'all' || task.workspace === workspace),
     [tasks, workspace]
   );
-  const openTaskCount = useMemo(() => scopedTasks.filter((task) => task.status !== 'done').length, [scopedTasks]);
+  const openTaskCount = useMemo(
+    () => scopedTasks.filter((task) => task.status !== 'done').length,
+    [scopedTasks]
+  );
   const today = getTodayStr();
   const todayStats = useMemo(() => computeTodayProgress(scopedTasks, today), [scopedTasks, today]);
 
@@ -1194,9 +1366,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             onClick={toggleNav}
             title="Cadence Navigation (B)"
             aria-label="Toggle navigation panel"
-            className="w-10 h-10 rounded-2xl btn-accent flex items-center justify-center font-display font-bold text-base shadow-sm"
+            className="rounded-[14px] transition-transform hover:scale-[1.04] active:scale-95"
           >
-            C
+            <BrandMark size={40} />
           </button>
 
           {/* Expand/collapse chevron */}
@@ -1392,6 +1564,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <Plus className="w-4 h-4" />
                   <span>New task</span>
                 </button>
+                <p className="text-[10px] text-[var(--text-3)] font-medium text-center pt-1 leading-tight">
+                  Product Developed & Distributed by<br />
+                  <span className="font-semibold text-[var(--text-2)]">Jha Solutions</span>
+                </p>
               </div>
             </motion.aside>
           </>
@@ -1463,8 +1639,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </span>
         </button>
 
-        {/* Right: Focus timer pill + today progress ring + grouped notifications/theme/settings + primary "New task" */}
+        {/* Right: Website link + Focus timer pill + today progress ring + grouped notifications/theme/settings + primary "New task" */}
         <div className="flex items-center gap-1 sm:gap-2.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowLandingPage(true)}
+            className="hidden md:inline-flex btn-ghost px-2.5 py-1.5 rounded-xl text-xs font-medium text-[var(--text-2)] hover:text-[var(--text-1)] whitespace-nowrap shrink-0"
+          >
+            Website & Pricing
+          </button>
+
           <FocusTimerBanner />
 
           {/* Today progress ring (uses exact shared formula) */}
@@ -1481,8 +1665,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </span>
           </button>
 
-          {/* Notifications + Theme toggle + settings icon grouped in ONE segmented container */}
+          {/* Notifications + Google Tasks + Gmail + Theme toggle + settings icon grouped in ONE segmented container */}
           <div className="inline-flex items-center p-0.5 rounded-xl bg-[var(--surface-1)] border border-[var(--border)] shrink-0">
+            <button
+              type="button"
+              onClick={() => setActiveModal('tasks_io')}
+              title="Fetch Google Tasks & Sheets"
+              aria-label="Fetch Google Tasks and Sheets Hub"
+              className="p-1.5 sm:p-2 rounded-lg text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] min-w-[34px] min-h-[34px] sm:min-w-[36px] sm:min-h-[36px] inline-flex items-center justify-center transition"
+            >
+              <CheckSquare className="w-4 h-4 text-[#10B981]" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveModal('gmail')}
+              title="Fetch Gmail Inbox & Messages"
+              aria-label="Fetch Gmail Inbox and Messages"
+              className="p-1.5 sm:p-2 rounded-lg text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] min-w-[34px] min-h-[34px] sm:min-w-[36px] sm:min-h-[36px] inline-flex items-center justify-center transition"
+            >
+              <Mail className="w-4 h-4 text-[#EA4335]" />
+            </button>
             <button
               ref={notifBtnRef}
               type="button"

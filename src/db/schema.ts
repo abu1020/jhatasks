@@ -1,4 +1,5 @@
 import { pgTable, text, integer, boolean, jsonb, doublePrecision } from 'drizzle-orm/pg-core';
+import { safeExternalUrl } from '../lib/safeUrl';
 
 export type WorkspaceType = 'office' | 'personal';
 export type WorkspaceFilter = 'all' | 'office' | 'personal';
@@ -9,6 +10,10 @@ export type RecurrenceType = 'daily' | 'weekdays' | 'weekly' | 'monthly';
 export type TaskSource = 'manual' | 'gmail' | 'google-tasks' | 'quick-add';
 export type ViewId = 'my_day' | 'board' | 'list' | 'calendar' | 'matrix' | 'insights';
 export type CalendarMode = 'month' | 'week' | 'day';
+
+export function isSafeExternalUrl(value: unknown): value is string {
+  return safeExternalUrl(value) !== null;
+}
 
 export interface Subtask {
   id: string;

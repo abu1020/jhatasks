@@ -39,8 +39,9 @@ export const SCOPES = [
 ];
 
 const app = initializeApp(firebaseConfig);
-const firestoreDatabaseId = (firebaseConfig as typeof firebaseConfig & { firestoreDatabaseId?: string }).firestoreDatabaseId;
-export const db = firestoreDatabaseId ? getFirestore(app, firestoreDatabaseId) : getFirestore(app);
+export const db = (firebaseConfig as any).firestoreDatabaseId
+  ? getFirestore(app, (firebaseConfig as any).firestoreDatabaseId)
+  : getFirestore(app);
 export const auth = getAuth(app);
 
 const provider = new GoogleAuthProvider();
@@ -48,8 +49,9 @@ for (const scope of SCOPES) {
   provider.addScope(scope);
 }
 
-// Validate connection to Firestore on boot
-async function testConnection() {
+// Validate connection to Firestore when authenticated
+export async function testConnection() {
+  if (!auth.currentUser) return;
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
   } catch (error) {
@@ -58,7 +60,7 @@ async function testConnection() {
     }
   }
 }
-void testConnection();
+
 
 export enum OperationType {
   CREATE = 'create',
@@ -131,13 +133,57 @@ export const initAuth = (
   });
 };
 
-export const googleSignIn = async (): Promise<{ user: User; accessToken: string | null }> => {
+export interface SignInResult {
+  user: {
+    uid: string;
+    email: string | null;
+    displayName: string | null;
+    photoURL: string | null;
+  };
+  accessToken: string | null;
+  isLocalFallback?: boolean;
+}
+
+export const googleSignIn = async (): Promise<SignInResult> => {
   try {
     isSigningIn = true;
     const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     cachedAccessToken = credential?.accessToken || null;
-    return { user: result.user, accessToken: cachedAccessToken };
+    return {
+      user: {
+        uid: result.user.uid,
+        email: result.user.email,
+        displayName: result.user.displayName,
+        photoURL: result.user.photoURL,
+      },
+      accessToken: cachedAccessToken,
+    };
+  } catch (err: any) {
+    const code = err?.code || '';
+    const message = err?.message || String(err);
+    const isUnauthorizedDomain =
+      code === 'auth/unauthorized-domain' ||
+      message.includes('unauthorized-domain') ||
+      message.includes('authorized domain');
+    const isPopupBlocked =
+      code === 'auth/popup-blocked' ||
+      message.includes('popup-blocked') ||
+      message.includes('blocked');
+
+    const enhancedErr: any = new Error(
+      isUnauthorizedDomain
+        ? 'Preview domain is not authorized for Google OAuth. Add it to Firebase authorized domains to sign in.'
+        : isPopupBlocked
+        ? 'Browser blocked the Google sign-in popup. Enable popups to authenticate.'
+        : message.includes('closed')
+        ? 'Google sign-in popup was closed before completion.'
+        : `Google sign-in error: ${message}`
+    );
+    enhancedErr.code = code;
+    enhancedErr.isUnauthorizedDomain = isUnauthorizedDomain;
+    enhancedErr.isPopupBlocked = isPopupBlocked;
+    throw enhancedErr;
   } finally {
     isSigningIn = false;
   }
@@ -146,9 +192,14 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 export const getAccessToken = (): string | null => cachedAccessToken;
 
 export const logout = async () => {
-  await auth.signOut();
+  try {
+    await auth.signOut();
+  } catch {
+    // Ignore sign-out errors on local sessions
+  }
   cachedAccessToken = null;
 };
+
 
 // Sanitize task payload to adhere to firebase-blueprint.json bounds
 function sanitizeTaskForFirestore(task: Task, uid: string) {
@@ -258,7 +309,7 @@ export async function fetchFirestoreUserTasksAndEvents(
 }
 
 export async function createTasksInFirestore(tasksToCreate: Task[], uid: string) {
-  if (!auth.currentUser || !auth.currentUser.emailVerified) return;
+  if (!auth.currentUser || auth.currentUser.uid !== uid) return;
   const batch = writeBatch(db);
   for (const t of tasksToCreate) {
     const clean = sanitizeTaskForFirestore(t, uid);
@@ -277,7 +328,7 @@ export async function createTasksInFirestore(tasksToCreate: Task[], uid: string)
 }
 
 export async function updateTaskInFirestore(task: Task, uid: string) {
-  if (!auth.currentUser || !auth.currentUser.emailVerified) return;
+  if (!auth.currentUser || auth.currentUser.uid !== uid) return;
   const clean = sanitizeTaskForFirestore(task, uid);
   const path = `users/${uid}/tasks/${clean.id}`;
   try {
@@ -295,7 +346,7 @@ export async function updateTaskInFirestore(task: Task, uid: string) {
 }
 
 export async function removeTaskFromFirestore(taskId: string, uid: string) {
-  if (!auth.currentUser || !auth.currentUser.emailVerified) return;
+  if (!auth.currentUser || auth.currentUser.uid !== uid) return;
   const cleanId = taskId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 128);
   const path = `users/${uid}/tasks/${cleanId}`;
   try {
@@ -740,7 +791,8 @@ export async function pullTasksFromGoogleSheet(
   }
 
   const proxyRes = await fetch(
-    `/api/sheets/sync?spreadsheetId=${encodeURIComponent(sheetId)}`
+    `/api/sheets/sync?spreadsheetId=${encodeURIComponent(sheetId)}`,
+    { headers: auth.currentUser ? { 'X-Cadence-User': auth.currentUser.uid } : {} }
   );
   if (!proxyRes.ok) {
     throw new Error('Could not read Google Sheet');

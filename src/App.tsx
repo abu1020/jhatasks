@@ -3,18 +3,42 @@ import { MotionConfig } from 'motion/react';
 import { AppShell } from './components/shell/Shell';
 import { ParticleBurstOverlay, ToastViewport } from './components/ui/Primitives';
 import { InHouseAssistant } from './components/ui/InHouseAssistant';
-
-const MyDayView = lazy(() => import('./components/views/MyDayView').then((m) => ({ default: m.MyDayView })));
-const BoardView = lazy(() => import('./components/views/BoardView').then((m) => ({ default: m.BoardView })));
-const ListView = lazy(() => import('./components/views/ListView').then((m) => ({ default: m.ListView })));
-const CalendarView = lazy(() => import('./components/views/CalendarView').then((m) => ({ default: m.CalendarView })));
-const MatrixView = lazy(() => import('./components/views/MatrixView').then((m) => ({ default: m.MatrixView })));
-const InsightsView = lazy(() => import('./components/views/InsightsView').then((m) => ({ default: m.InsightsView })));
-const TaskComposerModal = lazy(() => import('./components/modals/TaskComposer').then((m) => ({ default: m.TaskComposerModal })));
-const TaskDetailDrawer = lazy(() => import('./components/modals/TaskDetailDrawer').then((m) => ({ default: m.TaskDetailDrawer })));
-const EcosystemModals = lazy(() => import('./components/modals/EcosystemModals').then((m) => ({ default: m.EcosystemModals })));
 import { useCadenceStore } from './store/useCadenceStore';
 import type { ViewId } from './db/schema';
+
+const MyDayView = lazy(() =>
+  import('./components/views/MyDayView').then((m) => ({ default: m.MyDayView }))
+);
+const BoardView = lazy(() =>
+  import('./components/views/BoardView').then((m) => ({ default: m.BoardView }))
+);
+const ListView = lazy(() =>
+  import('./components/views/ListView').then((m) => ({ default: m.ListView }))
+);
+const CalendarView = lazy(() =>
+  import('./components/views/CalendarView').then((m) => ({ default: m.CalendarView }))
+);
+const MatrixView = lazy(() =>
+  import('./components/views/MatrixView').then((m) => ({ default: m.MatrixView }))
+);
+const InsightsView = lazy(() =>
+  import('./components/views/InsightsView').then((m) => ({ default: m.InsightsView }))
+);
+const NotFoundView = lazy(() =>
+  import('./components/views/NotFoundView').then((m) => ({ default: m.NotFoundView }))
+);
+const LandingWebsite = lazy(() =>
+  import('./components/views/LandingWebsite').then((m) => ({ default: m.LandingWebsite }))
+);
+const TaskComposerModal = lazy(() =>
+  import('./components/modals/TaskComposer').then((m) => ({ default: m.TaskComposerModal }))
+);
+const TaskDetailDrawer = lazy(() =>
+  import('./components/modals/TaskDetailDrawer').then((m) => ({ default: m.TaskDetailDrawer }))
+);
+const EcosystemModals = lazy(() =>
+  import('./components/modals/EcosystemModals').then((m) => ({ default: m.EcosystemModals }))
+);
 
 export default function App() {
   const theme = useCadenceStore((s) => s.theme);
@@ -25,7 +49,45 @@ export default function App() {
   const selectedEvent = useCadenceStore((s) => s.selectedEvent);
   const activeModal = useCadenceStore((s) => s.activeModal);
   const commandPaletteOpen = useCadenceStore((s) => s.commandPaletteOpen);
+  const showLandingPage = useCadenceStore((s) => s.showLandingPage);
   const timerRunning = useCadenceStore((s) => s.focusTimer.running);
+
+  const [is404, setIs404] = React.useState(false);
+
+  // Sync route on initial load and browser back/forward buttons
+  useEffect(() => {
+    const syncRouteFromPath = () => {
+      const path = window.location.pathname.toLowerCase().replace(/\/$/, '') || '/';
+      const VALID_ROUTES = new Set([
+        '/',
+        '/my-day',
+        '/my_day',
+        '/board',
+        '/list',
+        '/calendar',
+        '/matrix',
+        '/insights',
+        '/pricing',
+      ]);
+
+      if (!VALID_ROUTES.has(path)) {
+        setIs404(true);
+        return;
+      }
+
+      setIs404(false);
+      if (path === '/board') useCadenceStore.getState().setActiveView('board');
+      else if (path === '/list') useCadenceStore.getState().setActiveView('list');
+      else if (path === '/calendar') useCadenceStore.getState().setActiveView('calendar');
+      else if (path === '/matrix') useCadenceStore.getState().setActiveView('matrix');
+      else if (path === '/insights') useCadenceStore.getState().setActiveView('insights');
+      else if (path === '/my-day' || path === '/my_day') useCadenceStore.getState().setActiveView('my_day');
+    };
+
+    syncRouteFromPath();
+    window.addEventListener('popstate', syncRouteFromPath);
+    return () => window.removeEventListener('popstate', syncRouteFromPath);
+  }, []);
 
   // Sync dark mode class on <html>
   useEffect(() => {
@@ -37,7 +99,7 @@ export default function App() {
     }
   }, [theme]);
 
-  // Fetch local tasks immediately; load Firebase after first paint so auth code does not compete with first interaction.
+  // Hydrate local/session data immediately; defer Firebase until after the first paint.
   useEffect(() => {
     let active = true;
     let unsubscribe: (() => void) | undefined;
@@ -45,7 +107,7 @@ export default function App() {
 
     const authLoadTimer = window.setTimeout(() => {
       void import('./lib/firebase')
-        .then(({ initAuth, fetchFirestoreUserTasksAndEvents }) => {
+        .then(({ fetchFirestoreUserTasksAndEvents, initAuth }) => {
           if (!active) return;
           unsubscribe = initAuth(async (user, token) => {
             if (!active) return;
@@ -68,19 +130,19 @@ export default function App() {
               photo: user.photoURL,
               hasToken: Boolean(token),
             });
+            void store.hydrateFromApi();
             try {
               const cloud = await fetchFirestoreUserTasksAndEvents(user.uid);
-              if (!active) return;
+              if (!active || useCadenceStore.getState().userUid !== user.uid) return;
               if (cloud.tasks.length > 0) store.mergeExternalTasks(cloud.tasks);
               if (cloud.events.length > 0) store.mergeExternalEvents(cloud.events);
             } catch {
-              // Keep the local task view available when cloud sync is offline.
+              // Keep local task management usable when cloud sync is offline.
             }
           });
         })
         .catch(() => {
           if (!active) return;
-          // Firebase is optional for local task management; report no auth session if unavailable.
           useCadenceStore.getState().setAuthUser({
             uid: null,
             email: null,
@@ -122,6 +184,7 @@ export default function App() {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         const st = useCadenceStore.getState();
+        st.setShowLandingPage(false);
         st.setCommandPaletteOpen(!st.commandPaletteOpen);
         return;
       }
@@ -167,6 +230,7 @@ export default function App() {
 
       if (key === 'n') {
         e.preventDefault();
+        st.setShowLandingPage(false);
         st.openComposer();
       } else if (key === 'b') {
         e.preventDefault();
@@ -202,30 +266,50 @@ export default function App() {
       ? 'ws-personal'
       : 'ws-all';
 
+  const userEmail = useCadenceStore((s) => s.userEmail);
+  const userUid = useCadenceStore((s) => s.userUid);
+
+  // STRICT RULE: Software workspace is ONLY viewable when user is authenticated via Google
+  const canViewSoftware = Boolean(userEmail || userUid) && !showLandingPage;
+
   return (
     <MotionConfig reducedMotion="user">
       <div className={`${wsClass} min-h-dvh bg-[var(--bg)] text-[var(--text-1)] relative`}>
         <div className="ambient-glow" aria-hidden="true" />
 
-        <AppShell>
-          <Suspense fallback={<div className="mx-auto w-full max-w-7xl px-4 py-6" role="status" aria-label="Loading view"><div className="skeleton h-28 w-full mb-5" /><div className="grid grid-cols-1 lg:grid-cols-3 gap-4"><div className="skeleton h-64" /><div className="skeleton h-64" /><div className="skeleton h-64" /></div></div>}>
-            {activeView === 'my_day' && <MyDayView />}
-            {activeView === 'board' && <BoardView />}
-            {activeView === 'list' && <ListView />}
-            {activeView === 'calendar' && <CalendarView />}
-            {activeView === 'matrix' && <MatrixView />}
-            {activeView === 'insights' && <InsightsView />}
+        {is404 ? (
+          <Suspense fallback={<div className="p-8 text-sm text-[var(--text-3)] animate-pulse">Loading...</div>}>
+            <NotFoundView />
           </Suspense>
-        </AppShell>
+        ) : canViewSoftware ? (
+          <AppShell>
+            <Suspense
+              fallback={
+                <div className="p-8 text-sm text-[var(--text-3)] animate-pulse">
+                  Loading workspace view...
+                </div>
+              }
+            >
+              {activeView === 'my_day' && <MyDayView />}
+              {activeView === 'board' && <BoardView />}
+              {activeView === 'list' && <ListView />}
+              {activeView === 'calendar' && <CalendarView />}
+              {activeView === 'matrix' && <MatrixView />}
+              {activeView === 'insights' && <InsightsView />}
+            </Suspense>
+          </AppShell>
+        ) : (
+          <Suspense fallback={<div className="min-h-dvh" aria-busy="true" />}><LandingWebsite /></Suspense>
+        )}
 
         <Suspense fallback={null}>
           {composerOpen && <TaskComposerModal />}
-          {selectedTaskId && <TaskDetailDrawer />}
-          {(activeModal || selectedEvent || commandPaletteOpen) && <EcosystemModals />}
+          {(selectedTaskId || selectedEvent) && <TaskDetailDrawer />}
+          {(activeModal || commandPaletteOpen) && <EcosystemModals />}
         </Suspense>
         <ToastViewport />
         <ParticleBurstOverlay />
-        <InHouseAssistant />
+        {canViewSoftware && <InHouseAssistant />}
       </div>
     </MotionConfig>
   );

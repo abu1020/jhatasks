@@ -12,7 +12,7 @@ import {
   Video,
   Wand2,
 } from 'lucide-react';
-import type { CalendarEvent, Task } from '../../db/schema';
+import { isSafeExternalUrl, type CalendarEvent, type Task } from '../../db/schema';
 import {
   computeStreakDays,
   computeTodayProgress,
@@ -22,7 +22,6 @@ import {
   getTodayStr,
   timeToMinutes,
 } from '../../lib/dateUtils';
-import { safeExternalUrl } from '../../lib/safeUrl';
 import { useCadenceStore } from '../../store/useCadenceStore';
 import {
   EmptyState,
@@ -31,6 +30,7 @@ import {
   TagChip,
   WorkspaceDot,
 } from '../ui/Primitives';
+import { EcosystemSyncToolbar } from '../ui/EcosystemSyncToolbar';
 
 type TimelineEntry =
   | { kind: 'event'; time: string; sortMin: number; event: CalendarEvent }
@@ -214,6 +214,9 @@ export function MyDayView() {
         </div>
       </section>
 
+      {/* Google Tasks & Gmail Live Sync Toolbar */}
+      <EcosystemSyncToolbar />
+
       {/* First-Run Empty State when user has 0 tasks */}
       {scopedTasks.length === 0 && (
         <EmptyState
@@ -296,9 +299,9 @@ export function MyDayView() {
                           </div>
                         </div>
 
-                        {safeExternalUrl(ev.meet_link) && (
+                        {isSafeExternalUrl(ev.meet_link) && (
                           <a
-                            href={safeExternalUrl(ev.meet_link)!}
+                            href={ev.meet_link}
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}

@@ -364,6 +364,14 @@ export function parseGoogleTasksV1Json(
     }
   }
 
+  // Sort by Google Tasks v1 lexicographical `position` field when present
+  topLevelItems.sort((a, b) => {
+    if (typeof a.position === 'string' && typeof b.position === 'string') {
+      return a.position.localeCompare(b.position);
+    }
+    return 0;
+  });
+
   const nowIso = new Date().toISOString();
 
   return topLevelItems.map((it, idx): Task => {
@@ -399,7 +407,12 @@ export function parseGoogleTasksV1Json(
       : [];
 
     if (typeof it.id === 'string' && childrenByParent.has(it.id)) {
-      const children = childrenByParent.get(it.id) || [];
+      const children = [...(childrenByParent.get(it.id) || [])].sort((a, b) => {
+        if (typeof a.position === 'string' && typeof b.position === 'string') {
+          return a.position.localeCompare(b.position);
+        }
+        return 0;
+      });
       children.forEach((child, cIdx) => {
         subtasks.push({
           id: String(child.id || `gtask_sub_${idx}_${cIdx}`).replace(/[^a-zA-Z0-9_-]/g, '_'),
@@ -428,12 +441,22 @@ export function parseGoogleTasksV1Json(
       : Array.isArray(it.links)
       ? it.links
           .filter((l: any) => l && typeof l.link === 'string')
-          .map((l: any, lIdx: number): Attachment => ({
-            id: `gtlink_${idx}_${lIdx}`,
-            kind: l.type === 'email' ? 'link' : 'doc',
-            name: String(l.description || l.type || 'Google Task Link'),
-            url: String(l.link),
-          }))
+          .map((l: any, lIdx: number): Attachment => {
+            const rawType = String(l.type || '').toLowerCase();
+            const rawUrl = String(l.link);
+            let kind: Attachment['kind'] = 'link';
+            if (rawType === 'doc' || rawUrl.includes('docs.google.com/document')) kind = 'doc';
+            else if (rawType === 'sheet' || rawUrl.includes('docs.google.com/spreadsheets')) kind = 'sheet';
+            else if (rawType === 'slide' || rawUrl.includes('docs.google.com/presentation')) kind = 'slide';
+            else if (rawType === 'pdf' || rawUrl.endsWith('.pdf')) kind = 'pdf';
+            else if (rawType === 'image') kind = 'image';
+            return {
+              id: `gtlink_${idx}_${lIdx}`,
+              kind,
+              name: String(l.description || l.type || 'Google Task Link'),
+              url: rawUrl,
+            };
+          })
       : [];
 
     const isCompleted = it.status === 'completed' || it.status === 'done';
