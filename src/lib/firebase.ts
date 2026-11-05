@@ -309,7 +309,7 @@ export async function fetchFirestoreUserTasksAndEvents(
 }
 
 export async function createTasksInFirestore(tasksToCreate: Task[], uid: string) {
-  if (!auth.currentUser || !auth.currentUser.emailVerified) return;
+  if (!auth.currentUser || auth.currentUser.uid !== uid) return;
   const batch = writeBatch(db);
   for (const t of tasksToCreate) {
     const clean = sanitizeTaskForFirestore(t, uid);
@@ -328,7 +328,7 @@ export async function createTasksInFirestore(tasksToCreate: Task[], uid: string)
 }
 
 export async function updateTaskInFirestore(task: Task, uid: string) {
-  if (!auth.currentUser || !auth.currentUser.emailVerified) return;
+  if (!auth.currentUser || auth.currentUser.uid !== uid) return;
   const clean = sanitizeTaskForFirestore(task, uid);
   const path = `users/${uid}/tasks/${clean.id}`;
   try {
@@ -346,7 +346,7 @@ export async function updateTaskInFirestore(task: Task, uid: string) {
 }
 
 export async function removeTaskFromFirestore(taskId: string, uid: string) {
-  if (!auth.currentUser || !auth.currentUser.emailVerified) return;
+  if (!auth.currentUser || auth.currentUser.uid !== uid) return;
   const cleanId = taskId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 128);
   const path = `users/${uid}/tasks/${cleanId}`;
   try {
