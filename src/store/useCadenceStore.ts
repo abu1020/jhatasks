@@ -13,11 +13,6 @@ import type {
 import { computeAutoSchedulePlan, getTodayStr, nextRecurrenceDate } from '../lib/dateUtils';
 import { classifyGmailMessage, type GmailNotificationItem } from '../lib/nlpParser';
 import { playCompletionChime, playTimerCompleteChime } from '../lib/soundAndParticles';
-import {
-  createTasksInFirestore,
-  removeTaskFromFirestore,
-  updateTaskInFirestore,
-} from '../lib/firebase';
 
 export type ListGroupBy = 'priority' | 'due_date' | 'status';
 export type ListSortBy = 'priority' | 'due_date' | 'title' | 'newest';
@@ -203,6 +198,51 @@ const pendingPatches = new Map<string, Partial<Task>>();
 const debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const pendingDeleteTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+let sheetSyncTimer: ReturnType<typeof setTimeout> | null = null;
+let sheetSyncInFlight = false;
+let sheetSyncShowToast = false;
+let sheetSyncRunner: ((showToast: boolean) => Promise<number>) | null = null;
+let sheetSyncResolvers: Array<(count: number) => void> = [];
+
+function scheduleSheetSyncFlush() {
+  if (sheetSyncTimer || !sheetSyncRunner) return;
+  sheetSyncTimer = setTimeout(async () => {
+    sheetSyncTimer = null;
+    if (sheetSyncInFlight) return;
+
+    const run = sheetSyncRunner;
+    if (!run) return;
+    const notify = sheetSyncShowToast;
+    const resolvers = sheetSyncResolvers.splice(0);
+    sheetSyncRunner = null;
+    sheetSyncShowToast = false;
+    sheetSyncInFlight = true;
+    let count = 0;
+    try {
+      count = await run(notify);
+    } catch {
+      count = 0;
+    } finally {
+      sheetSyncInFlight = false;
+      resolvers.forEach((resolve) => resolve(count));
+      if (sheetSyncResolvers.length > 0) scheduleSheetSyncFlush();
+    }
+  }, 400);
+}
+
+function queueSheetSync(
+  run: (showToast: boolean) => Promise<number>,
+  showToast: boolean
+): Promise<number> {
+  sheetSyncRunner = run;
+  sheetSyncShowToast ||= showToast;
+  const result = new Promise<number>((resolve) => sheetSyncResolvers.push(resolve));
+  if (sheetSyncTimer) clearTimeout(sheetSyncTimer);
+  sheetSyncTimer = null;
+  scheduleSheetSyncFlush();
+  return result;
+}
+
 async function sendPatchWithRetry(id: string, patch: Partial<Task>): Promise<boolean> {
   const attempt = async () => {
     const res = await fetch(`/api/tasks/${encodeURIComponent(id)}`, {
@@ -370,36 +410,37 @@ export const useCadenceStore = create<CadenceState>()(
       setLinkedSpreadsheetId: (linkedSpreadsheetId) => set({ linkedSpreadsheetId }),
       setAutoSyncSheets: (autoSyncSheets) => set({ autoSyncSheets }),
 
-      syncTasksWithGoogleSheets: async (showToast = false) => {
-        const state = get();
-        try {
-          const res = await fetch('/api/sheets/sync', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              tasks: state.tasks,
-              spreadsheetId: state.linkedSpreadsheetId || 'cadence-master-tasks-sheet',
-            }),
-            keepalive: true,
-          });
-          if (res.ok) {
-            const data = await res.json();
-            set({ lastSheetSyncedAt: data.lastSyncedAt || new Date().toISOString() });
-            if (showToast) {
-              get().addToast({
-                message: `Synced all ${state.tasks.length} tasks with Google Sheets`,
-                tone: 'success',
-              });
+      syncTasksWithGoogleSheets: (showToast = false) =>
+        queueSheetSync(async (notify) => {
+          // Snapshot at flush time so bursts of edits become one latest-state write.
+          const state = get();
+          try {
+            const res = await fetch('/api/sheets/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                tasks: state.tasks,
+                spreadsheetId: state.linkedSpreadsheetId || 'cadence-master-tasks-sheet',
+              }),
+              keepalive: true,
+            });
+            if (res.ok) {
+              const data = await res.json();
+              set({ lastSheetSyncedAt: data.lastSyncedAt || new Date().toISOString() });
+              if (notify) {
+                get().addToast({
+                  message: `Synced all ${state.tasks.length} tasks with Google Sheets`,
+                  tone: 'success',
+                });
+              }
+              return state.tasks.length;
             }
-            return state.tasks.length;
+          } catch {
+            // Keep local edits responsive when the optional sync endpoint is unavailable.
           }
-        } catch {
-          // Ignore transient network errors during background sheet sync
-        }
-        const now = new Date().toISOString();
-        set({ lastSheetSyncedAt: now });
-        return state.tasks.length;
-      },
+          set({ lastSheetSyncedAt: new Date().toISOString() });
+          return state.tasks.length;
+        }, showToast),
 
       setNavOpen: (navOpen) => set({ navOpen }),
       toggleNav: () => set((s) => ({ navOpen: !s.navOpen })),
@@ -738,7 +779,7 @@ export const useCadenceStore = create<CadenceState>()(
         }
 
         if (state.userUid) {
-          void createTasksInFirestore([newTask], state.userUid);
+          void import('../lib/firebase').then(({ createTasksInFirestore }) => createTasksInFirestore([newTask], state.userUid!));
         }
         if (get().autoSyncSheets) {
           void get().syncTasksWithGoogleSheets();
@@ -771,7 +812,7 @@ export const useCadenceStore = create<CadenceState>()(
         }
         const uid = get().userUid;
         if (uid) {
-          void createTasksInFirestore(newTasks, uid);
+          void import('../lib/firebase').then(({ createTasksInFirestore }) => createTasksInFirestore(newTasks, uid));
         }
         if (get().autoSyncSheets) {
           void get().syncTasksWithGoogleSheets();
@@ -852,7 +893,7 @@ export const useCadenceStore = create<CadenceState>()(
             keepalive: true,
           });
           if (state.userUid) {
-            void createTasksInFirestore([clone], state.userUid);
+            void import('../lib/firebase').then(({ createTasksInFirestore }) => createTasksInFirestore([clone], state.userUid!));
           }
         }
 
@@ -880,7 +921,7 @@ export const useCadenceStore = create<CadenceState>()(
           const uid = get().userUid;
           const latestTask = get().tasks.find((t) => t.id === id);
           if (uid && latestTask) {
-            void updateTaskInFirestore(latestTask, uid);
+            void import('../lib/firebase').then(({ updateTaskInFirestore }) => updateTaskInFirestore(latestTask, uid));
           }
           if (get().autoSyncSheets) {
             void get().syncTasksWithGoogleSheets();
@@ -920,7 +961,7 @@ export const useCadenceStore = create<CadenceState>()(
           }
           const uid = get().userUid;
           if (uid) {
-            void removeTaskFromFirestore(id, uid);
+            void import('../lib/firebase').then(({ removeTaskFromFirestore }) => removeTaskFromFirestore(id, uid));
           }
           if (get().autoSyncSheets) {
             void get().syncTasksWithGoogleSheets();

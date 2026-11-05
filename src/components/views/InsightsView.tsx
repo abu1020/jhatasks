@@ -28,27 +28,33 @@ export function InsightsView() {
   const today = getTodayStr();
   const streak = useMemo(() => computeStreakDays(tasks, today), [tasks, today]);
 
-  // Last 7 days velocity
+  // Aggregate once instead of scanning the complete task list once per chart day.
+  const completionsByDate = useMemo(() => {
+    const counts = new Map<string, number>();
+    const startDate = addDaysStr(today, -6);
+    for (const task of tasks) {
+      if (task.status !== 'done') continue;
+      const completedDate = task.completed_at
+        ? formatLocalDate(new Date(task.completed_at))
+        : task.due_date;
+      if (!completedDate || completedDate < startDate || completedDate > today) continue;
+      counts.set(completedDate, (counts.get(completedDate) || 0) + 1);
+    }
+    return counts;
+  }, [tasks, today]);
+
   const last7Days = useMemo(
     () =>
       Array.from({ length: 7 }, (_, idx) => {
-        const dStr = addDaysStr(today, idx - 6);
-        const dObj = parseLocalDate(dStr);
-        const count = tasks.filter(
-          (t) =>
-            t.status === 'done' &&
-            ((t.completed_at &&
-              formatLocalDate(new Date(t.completed_at)) === dStr) ||
-              (!t.completed_at && t.due_date === dStr))
-        ).length;
+        const dateStr = addDaysStr(today, idx - 6);
         return {
-          dateStr: dStr,
-          dayLabel: dObj.toLocaleDateString('en-US', { weekday: 'short' }),
-          count,
-          isToday: dStr === today,
+          dateStr,
+          dayLabel: parseLocalDate(dateStr).toLocaleDateString('en-US', { weekday: 'short' }),
+          count: completionsByDate.get(dateStr) || 0,
+          isToday: dateStr === today,
         };
       }),
-    [tasks, today]
+    [completionsByDate, today]
   );
 
   const doneThisWeek = useMemo(
@@ -158,7 +164,7 @@ export function InsightsView() {
 
         <div className="card p-4.5 space-y-1">
           <div className="flex items-center justify-between text-xs text-[var(--text-3)]">
-            <span>Focus Minutes (7d)</span>
+            <span>Focus Minutes Total</span>
             <Clock className="w-4 h-4 text-[var(--accent)]" />
           </div>
           <div className="font-display text-2xl font-bold text-[var(--text-1)] tnum">
@@ -238,7 +244,7 @@ export function InsightsView() {
         <div className="lg:col-span-5 card p-5 flex flex-col justify-between">
           <div>
             <h3 className="font-display text-sm font-bold text-[var(--text-1)]">
-              30-Day Workspace Balance
+              Workspace Balance
             </h3>
             <p className="text-xs text-[var(--text-3)]">
               Distribution between Office deliverables and Personal life

@@ -32,6 +32,7 @@ import {
   type TaskStatus,
 } from '../../db/schema';
 import { addDaysStr, getTodayStr } from '../../lib/dateUtils';
+import { safeExternalUrl } from '../../lib/safeUrl';
 import { useCadenceStore } from '../../store/useCadenceStore';
 import { CustomSelect, ProgressBar, SegmentedControl, TagChip, type SelectOption } from '../ui/Primitives';
 
@@ -712,9 +713,9 @@ function TaskDetailBody({
                   className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-[var(--surface-1)] border border-[var(--border)] text-xs"
                 >
                   <a
-                    href={att.url}
+                    href={safeExternalUrl(att.url) || undefined}
                     target="_blank"
-                    rel="noreferrer"
+                    rel="noopener noreferrer"
                     className="inline-flex items-center gap-2 font-medium text-[var(--text-1)] hover:text-[var(--accent)] truncate"
                   >
                     <AttachmentIcon kind={att.kind} />

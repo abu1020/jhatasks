@@ -75,7 +75,9 @@ export function CustomSelect<T extends string = string>({
     }
 
     const left = Math.max(8, Math.min(rect.left, vw - desiredWidth - 8));
-    setCoords({ top, left, width: desiredWidth });
+    setCoords((current) => current.top === top && current.left === left && current.width === desiredWidth
+      ? current
+      : { top, left, width: desiredWidth });
   };
 
   useLayoutEffect(() => {
@@ -84,10 +86,18 @@ export function CustomSelect<T extends string = string>({
     const idx = options.findIndex((o) => o.value === value);
     setActiveIndex(idx >= 0 ? idx : 0);
 
-    const handleReposition = () => updatePosition();
+    let frame = 0;
+    const handleReposition = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        updatePosition();
+      });
+    };
     window.addEventListener('scroll', handleReposition, true);
     window.addEventListener('resize', handleReposition);
     return () => {
+      cancelAnimationFrame(frame);
       window.removeEventListener('scroll', handleReposition, true);
       window.removeEventListener('resize', handleReposition);
     };

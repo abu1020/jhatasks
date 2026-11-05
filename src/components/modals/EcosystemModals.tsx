@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import type { Attachment, Task } from '../../db/schema';
 import { formatHumanDate, formatTime12h, getTodayStr } from '../../lib/dateUtils';
+import { safeExternalUrl } from '../../lib/safeUrl';
 import {
   createGoogleTaskLive,
   deleteGoogleTaskLive,
@@ -343,11 +344,11 @@ export function CalendarEventDetailModal() {
           </div>
 
           <div className="flex items-center justify-between gap-2 pt-1">
-            {ev.meet_link ? (
+            {safeExternalUrl(ev.meet_link) ? (
               <a
-                href={ev.meet_link}
+                href={safeExternalUrl(ev.meet_link)!}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="btn-accent px-4 py-2.5 rounded-xl text-xs font-semibold inline-flex items-center gap-2 min-h-[40px]"
               >
                 <Video className="w-4 h-4" />

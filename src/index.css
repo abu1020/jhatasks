@@ -118,8 +118,26 @@
     background-color: var(--bg);
     color: var(--text-1);
     font-family: "Inter Variable", "Inter", system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    font-feature-settings: "cv11", "ss01";
     -webkit-font-smoothing: antialiased;
     overflow-x: hidden;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    color: #fff;
+    background: var(--accent-strong);
+  }
+
+  * {
+    scrollbar-color: var(--border-strong) transparent;
+    scrollbar-width: thin;
   }
 
   h1,
@@ -128,6 +146,7 @@
   h4,
   .font-display {
     font-family: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", system-ui, sans-serif;
+    letter-spacing: -0.025em;
   }
 
   /* Prevent iOS zoom on inputs */
@@ -174,6 +193,11 @@
 }
 .btn-accent:active {
   transform: scale(0.965);
+}
+.btn-accent:disabled {
+  cursor: not-allowed;
+  filter: saturate(0.55);
+  box-shadow: none;
 }
 
 .btn-ghost {

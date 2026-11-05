@@ -1,18 +1,18 @@
-import React, { useEffect } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { MotionConfig } from 'motion/react';
 import { AppShell } from './components/shell/Shell';
-import { MyDayView } from './components/views/MyDayView';
-import { BoardView } from './components/views/BoardView';
-import { ListView } from './components/views/ListView';
-import { CalendarView } from './components/views/CalendarView';
-import { MatrixView } from './components/views/MatrixView';
-import { InsightsView } from './components/views/InsightsView';
-import { TaskComposerModal } from './components/modals/TaskComposer';
-import { TaskDetailDrawer } from './components/modals/TaskDetailDrawer';
-import { EcosystemModals } from './components/modals/EcosystemModals';
 import { ParticleBurstOverlay, ToastViewport } from './components/ui/Primitives';
 import { InHouseAssistant } from './components/ui/InHouseAssistant';
-import { fetchFirestoreUserTasksAndEvents, initAuth } from './lib/firebase';
+
+const MyDayView = lazy(() => import('./components/views/MyDayView').then((m) => ({ default: m.MyDayView })));
+const BoardView = lazy(() => import('./components/views/BoardView').then((m) => ({ default: m.BoardView })));
+const ListView = lazy(() => import('./components/views/ListView').then((m) => ({ default: m.ListView })));
+const CalendarView = lazy(() => import('./components/views/CalendarView').then((m) => ({ default: m.CalendarView })));
+const MatrixView = lazy(() => import('./components/views/MatrixView').then((m) => ({ default: m.MatrixView })));
+const InsightsView = lazy(() => import('./components/views/InsightsView').then((m) => ({ default: m.InsightsView })));
+const TaskComposerModal = lazy(() => import('./components/modals/TaskComposer').then((m) => ({ default: m.TaskComposerModal })));
+const TaskDetailDrawer = lazy(() => import('./components/modals/TaskDetailDrawer').then((m) => ({ default: m.TaskDetailDrawer })));
+const EcosystemModals = lazy(() => import('./components/modals/EcosystemModals').then((m) => ({ default: m.EcosystemModals })));
 import { useCadenceStore } from './store/useCadenceStore';
 import type { ViewId } from './db/schema';
 
@@ -20,6 +20,11 @@ export default function App() {
   const theme = useCadenceStore((s) => s.theme);
   const workspace = useCadenceStore((s) => s.workspace);
   const activeView = useCadenceStore((s) => s.activeView);
+  const composerOpen = useCadenceStore((s) => s.composer.open);
+  const selectedTaskId = useCadenceStore((s) => s.selectedTaskId);
+  const selectedEvent = useCadenceStore((s) => s.selectedEvent);
+  const activeModal = useCadenceStore((s) => s.activeModal);
+  const commandPaletteOpen = useCadenceStore((s) => s.commandPaletteOpen);
   const timerRunning = useCadenceStore((s) => s.focusTimer.running);
 
   // Sync dark mode class on <html>
@@ -32,38 +37,65 @@ export default function App() {
     }
   }, [theme]);
 
-  // Hydrate once on mount & initialize Firebase Auth listener
+  // Fetch local tasks immediately; load Firebase after first paint so auth code does not compete with first interaction.
   useEffect(() => {
+    let active = true;
+    let unsubscribe: (() => void) | undefined;
     void useCadenceStore.getState().hydrateFromApi();
 
-    const unsub = initAuth(async (user, token) => {
-      const store = useCadenceStore.getState();
-      if (user) {
-        store.setAuthUser({
-          uid: user.uid,
-          email: user.email,
-          name: user.displayName,
-          photo: user.photoURL,
-          hasToken: Boolean(token),
+    const authLoadTimer = window.setTimeout(() => {
+      void import('./lib/firebase')
+        .then(({ initAuth, fetchFirestoreUserTasksAndEvents }) => {
+          if (!active) return;
+          unsubscribe = initAuth(async (user, token) => {
+            if (!active) return;
+            const store = useCadenceStore.getState();
+            if (!user) {
+              store.setAuthUser({
+                uid: null,
+                email: null,
+                name: null,
+                photo: null,
+                hasToken: false,
+              });
+              return;
+            }
+
+            store.setAuthUser({
+              uid: user.uid,
+              email: user.email,
+              name: user.displayName,
+              photo: user.photoURL,
+              hasToken: Boolean(token),
+            });
+            try {
+              const cloud = await fetchFirestoreUserTasksAndEvents(user.uid);
+              if (!active) return;
+              if (cloud.tasks.length > 0) store.mergeExternalTasks(cloud.tasks);
+              if (cloud.events.length > 0) store.mergeExternalEvents(cloud.events);
+            } catch {
+              // Keep the local task view available when cloud sync is offline.
+            }
+          });
+        })
+        .catch(() => {
+          if (!active) return;
+          // Firebase is optional for local task management; report no auth session if unavailable.
+          useCadenceStore.getState().setAuthUser({
+            uid: null,
+            email: null,
+            name: null,
+            photo: null,
+            hasToken: false,
+          });
         });
-        try {
-          const cloud = await fetchFirestoreUserTasksAndEvents(user.uid);
-          if (cloud.tasks.length > 0) store.mergeExternalTasks(cloud.tasks);
-          if (cloud.events.length > 0) store.mergeExternalEvents(cloud.events);
-        } catch {
-          // Ignore initial sync errors
-        }
-      } else {
-        store.setAuthUser({
-          uid: null,
-          email: null,
-          name: null,
-          photo: null,
-          hasToken: false,
-        });
-      }
-    });
-    return () => unsub();
+    }, 500);
+
+    return () => {
+      active = false;
+      window.clearTimeout(authLoadTimer);
+      unsubscribe?.();
+    };
   }, []);
 
   // ONE interval at app root, gated strictly on timerRunning
@@ -176,17 +208,21 @@ export default function App() {
         <div className="ambient-glow" aria-hidden="true" />
 
         <AppShell>
-          {activeView === 'my_day' && <MyDayView />}
-          {activeView === 'board' && <BoardView />}
-          {activeView === 'list' && <ListView />}
-          {activeView === 'calendar' && <CalendarView />}
-          {activeView === 'matrix' && <MatrixView />}
-          {activeView === 'insights' && <InsightsView />}
+          <Suspense fallback={<div className="mx-auto w-full max-w-7xl px-4 py-6" role="status" aria-label="Loading view"><div className="skeleton h-28 w-full mb-5" /><div className="grid grid-cols-1 lg:grid-cols-3 gap-4"><div className="skeleton h-64" /><div className="skeleton h-64" /><div className="skeleton h-64" /></div></div>}>
+            {activeView === 'my_day' && <MyDayView />}
+            {activeView === 'board' && <BoardView />}
+            {activeView === 'list' && <ListView />}
+            {activeView === 'calendar' && <CalendarView />}
+            {activeView === 'matrix' && <MatrixView />}
+            {activeView === 'insights' && <InsightsView />}
+          </Suspense>
         </AppShell>
 
-        <TaskComposerModal />
-        <TaskDetailDrawer />
-        <EcosystemModals />
+        <Suspense fallback={null}>
+          {composerOpen && <TaskComposerModal />}
+          {selectedTaskId && <TaskDetailDrawer />}
+          {(activeModal || selectedEvent || commandPaletteOpen) && <EcosystemModals />}
+        </Suspense>
         <ToastViewport />
         <ParticleBurstOverlay />
         <InHouseAssistant />

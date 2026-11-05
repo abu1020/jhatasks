@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import {
@@ -42,17 +42,12 @@ import {
 } from 'lucide-react';
 import type { ViewId, WorkspaceFilter } from '../../db/schema';
 import { computeTodayProgress, getTodayStr } from '../../lib/dateUtils';
-import {
-  fetchFirestoreUserTasksAndEvents,
-  fetchGmailNotificationsLive,
-  fetchGoogleCalendarLiveEvents,
-  fetchGoogleTasksLive,
-  googleSignIn,
-  logout,
-} from '../../lib/firebase';
 import { parseGoogleTasksV1Json, type GmailNotificationItem } from '../../lib/nlpParser';
 import { useCadenceStore } from '../../store/useCadenceStore';
 import { ProgressRing } from '../ui/Primitives';
+
+// Keep Firebase and Google integration code out of the initial shell bundle.
+const loadFirebase = () => import('../../lib/firebase');
 
 export const VIEW_CONFIG: {
   id: ViewId;
@@ -86,6 +81,7 @@ export function GoogleSignInButton({
   const handleSignIn = async () => {
     setBusy(true);
     try {
+      const { googleSignIn } = await loadFirebase();
       const res = await googleSignIn();
       setAuthUser({
         uid: res.user.uid,
@@ -99,13 +95,13 @@ export function GoogleSignInButton({
         tone: 'success',
       });
       if (res.accessToken) {
-        fetchGmailNotificationsLive(res.user.email)
+        void loadFirebase().then(({ fetchGmailNotificationsLive }) => fetchGmailNotificationsLive(res.user.email))
           .then((items) => {
             ingestGmailNotifications(items, { forceToastNewest: true });
           })
           .catch(() => {});
       }
-      fetchFirestoreUserTasksAndEvents(res.user.uid)
+      void loadFirebase().then(({ fetchFirestoreUserTasksAndEvents }) => fetchFirestoreUserTasksAndEvents(res.user.uid))
         .then((cloudData) => {
           if (cloudData.tasks.length > 0) mergeExternalTasks(cloudData.tasks);
           if (cloudData.events.length > 0) mergeExternalEvents(cloudData.events);
@@ -286,18 +282,29 @@ function NotificationsPopover({
     const vw = window.innerWidth;
     const width = Math.min(356, vw - 16);
     const left = Math.max(8, Math.min(rect.right - width, vw - width - 8));
-    const top = Math.min(rect.bottom + 8, window.innerHeight - 460);
-    setCoords({ top: Math.max(8, top), left, width });
+    const top = Math.max(8, Math.min(rect.bottom + 8, window.innerHeight - 460));
+    setCoords((current) => current.top === top && current.left === left && current.width === width
+      ? current
+      : { top, left, width });
   };
 
   useLayoutEffect(() => {
     if (!notificationsOpen) return;
-    updatePos();
-    window.addEventListener('resize', updatePos);
-    window.addEventListener('scroll', updatePos, true);
+    let frame = 0;
+    const schedulePosition = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        updatePos();
+      });
+    };
+    schedulePosition();
+    window.addEventListener('resize', schedulePosition);
+    window.addEventListener('scroll', schedulePosition, true);
     return () => {
-      window.removeEventListener('resize', updatePos);
-      window.removeEventListener('scroll', updatePos, true);
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', schedulePosition);
+      window.removeEventListener('scroll', schedulePosition, true);
     };
   }, [notificationsOpen]);
 
@@ -325,6 +332,7 @@ function NotificationsPopover({
     setCheckingGmail(true);
     setGmailPollStatus('polling');
     try {
+      const { fetchGmailNotificationsLive } = await loadFirebase();
       const liveItems = await fetchGmailNotificationsLive(userEmail);
       const added = ingestGmailNotifications(liveItems, { forceToastNewest: true });
       if (added === 0 && liveItems.length > 0) {
@@ -342,6 +350,7 @@ function NotificationsPopover({
       if (err?.message === 'NEEDS_GOOGLE_AUTH') {
         setGmailPollStatus('needs_auth');
         try {
+          const { googleSignIn } = await loadFirebase();
           const res = await googleSignIn();
           setAuthUser({
             uid: res.user.uid,
@@ -351,6 +360,7 @@ function NotificationsPopover({
             hasToken: Boolean(res.accessToken),
           });
           if (res.accessToken) {
+            const { fetchGmailNotificationsLive } = await loadFirebase();
             const liveItems = await fetchGmailNotificationsLive(res.user.email);
             ingestGmailNotifications(liveItems, { forceToastNewest: true });
           }
@@ -638,18 +648,29 @@ function SettingsPopover({
     const vw = window.innerWidth;
     const width = Math.min(324, vw - 16);
     const left = Math.max(8, Math.min(rect.right - width, vw - width - 8));
-    const top = Math.min(rect.bottom + 8, window.innerHeight - 480);
-    setCoords({ top: Math.max(8, top), left, width });
+    const top = Math.max(8, Math.min(rect.bottom + 8, window.innerHeight - 480));
+    setCoords((current) => current.top === top && current.left === left && current.width === width
+      ? current
+      : { top, left, width });
   };
 
   useLayoutEffect(() => {
     if (!settingsOpen) return;
-    updatePos();
-    window.addEventListener('resize', updatePos);
-    window.addEventListener('scroll', updatePos, true);
+    let frame = 0;
+    const schedulePosition = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        updatePos();
+      });
+    };
+    schedulePosition();
+    window.addEventListener('resize', schedulePosition);
+    window.addEventListener('scroll', schedulePosition, true);
     return () => {
-      window.removeEventListener('resize', updatePos);
-      window.removeEventListener('scroll', updatePos, true);
+      cancelAnimationFrame(frame);
+      window.removeEventListener('resize', schedulePosition);
+      window.removeEventListener('scroll', schedulePosition, true);
     };
   }, [settingsOpen]);
 
@@ -723,6 +744,7 @@ function SettingsPopover({
         (m, t) => (t.sort_order > m ? t.sort_order : m),
         0
       );
+      const { fetchGoogleTasksLive } = await loadFirebase();
       const pulled = await fetchGoogleTasksLive('@default', maxOrder);
       if (pulled.length > 0) {
         await importTasksBatch(pulled);
@@ -771,6 +793,7 @@ function SettingsPopover({
   const handleSyncCalendar = async () => {
     setSyncingCal(true);
     try {
+      const { fetchGoogleCalendarLiveEvents } = await loadFirebase();
       const liveEvents = await fetchGoogleCalendarLiveEvents();
       mergeExternalEvents(liveEvents);
       addToast({
@@ -780,6 +803,7 @@ function SettingsPopover({
     } catch (err: any) {
       if (err?.message === 'NEEDS_GOOGLE_AUTH') {
         try {
+          const { googleSignIn } = await loadFirebase();
           const res = await googleSignIn();
           setAuthUser({
             uid: res.user.uid,
@@ -788,6 +812,7 @@ function SettingsPopover({
             photo: res.user.photoURL,
             hasToken: Boolean(res.accessToken),
           });
+          const { fetchGoogleCalendarLiveEvents } = await loadFirebase();
           const liveEvents = await fetchGoogleCalendarLiveEvents();
           mergeExternalEvents(liveEvents);
           addToast({
@@ -876,6 +901,7 @@ function SettingsPopover({
           <button
             type="button"
             onClick={async () => {
+              const { logout } = await loadFirebase();
               await logout();
               setAuthUser({ uid: null, email: null, name: null, photo: null, hasToken: false });
               addToast({ message: 'Signed out of Google account' });
@@ -1066,28 +1092,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const settingsBtnRef = useRef<HTMLButtonElement | null>(null);
   const notifBtnRef = useRef<HTMLButtonElement | null>(null);
 
-  // Hydrate cached real Gmail notifications for the signed-in user from backend on mount
-  useEffect(() => {
-    if (!userEmail) return;
-    fetch(`/api/gmail/notifications?email=${encodeURIComponent(userEmail)}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data && Array.isArray(data.messages) && data.messages.length > 0) {
-          ingestGmailNotifications(data.messages);
-        }
-      })
-      .catch(() => {});
-  }, [userEmail, ingestGmailNotifications]);
-
   // Real-time Gmail polling loop every 15s + on window focus/visibility when signed in with Google OAuth token
   useEffect(() => {
     if (!hasGoogleToken) return;
     let cancelled = false;
+    let polling = false;
 
     const poll = async () => {
-      if (cancelled) return;
+      if (cancelled || polling) return;
+      polling = true;
       setGmailPollStatus('polling');
       try {
+        const { fetchGmailNotificationsLive } = await loadFirebase();
         const items = await fetchGmailNotificationsLive(userEmail);
         if (!cancelled) {
           ingestGmailNotifications(items);
@@ -1108,6 +1124,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             setGmailPollStatus('error');
           }
         }
+      } finally {
+        polling = false;
       }
     };
 
@@ -1134,14 +1152,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, [hasGoogleToken, userEmail, ingestGmailNotifications, setGmailPollStatus, setAuthUser]);
 
-  const unreadNotifCount = notifications.filter((n) => !n.read).length;
-  const hasUnreadOtp = notifications.some((n) => !n.read && n.category === 'otp');
+  const unreadNotifCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
+  const hasUnreadOtp = useMemo(() => notifications.some((n) => !n.read && n.category === 'otp'), [notifications]);
 
-  const scopedTasks = tasks.filter(
-    (t) => workspace === 'all' || t.workspace === workspace
+  const scopedTasks = useMemo(
+    () => tasks.filter((task) => workspace === 'all' || task.workspace === workspace),
+    [tasks, workspace]
   );
-  const openTaskCount = scopedTasks.filter((t) => t.status !== 'done').length;
-  const todayStats = computeTodayProgress(scopedTasks, getTodayStr());
+  const openTaskCount = useMemo(() => scopedTasks.filter((task) => task.status !== 'done').length, [scopedTasks]);
+  const today = getTodayStr();
+  const todayStats = useMemo(() => computeTodayProgress(scopedTasks, today), [scopedTasks, today]);
 
   const currentViewMeta =
     VIEW_CONFIG.find((v) => v.id === activeView) || VIEW_CONFIG[0];
