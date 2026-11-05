@@ -1,4 +1,5 @@
 import { pgTable, text, integer, boolean, jsonb, doublePrecision } from 'drizzle-orm/pg-core';
+import { safeExternalUrl } from '../lib/safeUrl';
 
 export type WorkspaceType = 'office' | 'personal';
 export type WorkspaceFilter = 'all' | 'office' | 'personal';
@@ -11,13 +12,7 @@ export type ViewId = 'my_day' | 'board' | 'list' | 'calendar' | 'matrix' | 'insi
 export type CalendarMode = 'month' | 'week' | 'day';
 
 export function isSafeExternalUrl(value: unknown): value is string {
-  if (typeof value !== 'string' || value.length > 2048) return false;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:';
-  } catch {
-    return false;
-  }
+  return safeExternalUrl(value) !== null;
 }
 
 export interface Subtask {

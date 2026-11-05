@@ -1,13 +1,8 @@
 import React, { Suspense, lazy, useEffect } from 'react';
 import { MotionConfig } from 'motion/react';
 import { AppShell } from './components/shell/Shell';
-import { LandingWebsite } from './components/views/LandingWebsite';
-import { TaskComposerModal } from './components/modals/TaskComposer';
-import { TaskDetailDrawer } from './components/modals/TaskDetailDrawer';
-import { EcosystemModals } from './components/modals/EcosystemModals';
 import { ParticleBurstOverlay, ToastViewport } from './components/ui/Primitives';
 import { InHouseAssistant } from './components/ui/InHouseAssistant';
-import { fetchFirestoreUserTasksAndEvents, initAuth } from './lib/firebase';
 import { useCadenceStore } from './store/useCadenceStore';
 import type { ViewId } from './db/schema';
 
@@ -32,11 +27,28 @@ const InsightsView = lazy(() =>
 const NotFoundView = lazy(() =>
   import('./components/views/NotFoundView').then((m) => ({ default: m.NotFoundView }))
 );
+const LandingWebsite = lazy(() =>
+  import('./components/views/LandingWebsite').then((m) => ({ default: m.LandingWebsite }))
+);
+const TaskComposerModal = lazy(() =>
+  import('./components/modals/TaskComposer').then((m) => ({ default: m.TaskComposerModal }))
+);
+const TaskDetailDrawer = lazy(() =>
+  import('./components/modals/TaskDetailDrawer').then((m) => ({ default: m.TaskDetailDrawer }))
+);
+const EcosystemModals = lazy(() =>
+  import('./components/modals/EcosystemModals').then((m) => ({ default: m.EcosystemModals }))
+);
 
 export default function App() {
   const theme = useCadenceStore((s) => s.theme);
   const workspace = useCadenceStore((s) => s.workspace);
   const activeView = useCadenceStore((s) => s.activeView);
+  const composerOpen = useCadenceStore((s) => s.composer.open);
+  const selectedTaskId = useCadenceStore((s) => s.selectedTaskId);
+  const selectedEvent = useCadenceStore((s) => s.selectedEvent);
+  const activeModal = useCadenceStore((s) => s.activeModal);
+  const commandPaletteOpen = useCadenceStore((s) => s.commandPaletteOpen);
   const showLandingPage = useCadenceStore((s) => s.showLandingPage);
   const timerRunning = useCadenceStore((s) => s.focusTimer.running);
 
@@ -87,40 +99,65 @@ export default function App() {
     }
   }, [theme]);
 
-  // Hydrate once on mount & initialize Firebase Auth listener
+  // Hydrate local/session data immediately; defer Firebase until after the first paint.
   useEffect(() => {
+    let active = true;
+    let unsubscribe: (() => void) | undefined;
     void useCadenceStore.getState().hydrateFromApi();
 
-    const unsub = initAuth(async (user, token) => {
-      const store = useCadenceStore.getState();
-      if (user) {
-        store.setAuthUser({
-          uid: user.uid,
-          email: user.email,
-          name: user.displayName,
-          photo: user.photoURL,
-          hasToken: Boolean(token),
+    const authLoadTimer = window.setTimeout(() => {
+      void import('./lib/firebase')
+        .then(({ fetchFirestoreUserTasksAndEvents, initAuth }) => {
+          if (!active) return;
+          unsubscribe = initAuth(async (user, token) => {
+            if (!active) return;
+            const store = useCadenceStore.getState();
+            if (!user) {
+              store.setAuthUser({
+                uid: null,
+                email: null,
+                name: null,
+                photo: null,
+                hasToken: false,
+              });
+              return;
+            }
+
+            store.setAuthUser({
+              uid: user.uid,
+              email: user.email,
+              name: user.displayName,
+              photo: user.photoURL,
+              hasToken: Boolean(token),
+            });
+            void store.hydrateFromApi();
+            try {
+              const cloud = await fetchFirestoreUserTasksAndEvents(user.uid);
+              if (!active || useCadenceStore.getState().userUid !== user.uid) return;
+              if (cloud.tasks.length > 0) store.mergeExternalTasks(cloud.tasks);
+              if (cloud.events.length > 0) store.mergeExternalEvents(cloud.events);
+            } catch {
+              // Keep local task management usable when cloud sync is offline.
+            }
+          });
+        })
+        .catch(() => {
+          if (!active) return;
+          useCadenceStore.getState().setAuthUser({
+            uid: null,
+            email: null,
+            name: null,
+            photo: null,
+            hasToken: false,
+          });
         });
-        void store.hydrateFromApi();
-        try {
-          const cloud = await fetchFirestoreUserTasksAndEvents(user.uid);
-          if (useCadenceStore.getState().userUid !== user.uid) return;
-          if (cloud.tasks.length > 0) store.mergeExternalTasks(cloud.tasks);
-          if (cloud.events.length > 0) store.mergeExternalEvents(cloud.events);
-        } catch {
-          // Ignore initial sync errors
-        }
-      } else {
-        store.setAuthUser({
-          uid: null,
-          email: null,
-          name: null,
-          photo: null,
-          hasToken: false,
-        });
-      }
-    });
-    return () => unsub();
+    }, 500);
+
+    return () => {
+      active = false;
+      window.clearTimeout(authLoadTimer);
+      unsubscribe?.();
+    };
   }, []);
 
   // ONE interval at app root, gated strictly on timerRunning
@@ -262,12 +299,14 @@ export default function App() {
             </Suspense>
           </AppShell>
         ) : (
-          <LandingWebsite />
+          <Suspense fallback={<div className="min-h-dvh" aria-busy="true" />}><LandingWebsite /></Suspense>
         )}
 
-        <TaskComposerModal />
-        <TaskDetailDrawer />
-        <EcosystemModals />
+        <Suspense fallback={null}>
+          {composerOpen && <TaskComposerModal />}
+          {(selectedTaskId || selectedEvent) && <TaskDetailDrawer />}
+          {(activeModal || commandPaletteOpen) && <EcosystemModals />}
+        </Suspense>
         <ToastViewport />
         <ParticleBurstOverlay />
         {canViewSoftware && <InHouseAssistant />}
@@ -275,4 +314,3 @@ export default function App() {
     </MotionConfig>
   );
 }
-

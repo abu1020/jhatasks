@@ -13,11 +13,14 @@ import type {
 import { computeAutoSchedulePlan, getTodayStr, nextRecurrenceDate } from '../lib/dateUtils';
 import { classifyGmailMessage, type GmailNotificationItem } from '../lib/nlpParser';
 import { playCompletionChime, playTimerCompleteChime } from '../lib/soundAndParticles';
-import {
-  createTasksInFirestore,
-  removeTaskFromFirestore,
-  updateTaskInFirestore,
-} from '../lib/firebase';
+type FirebaseModule = typeof import('../lib/firebase');
+const loadFirebase = () => import('../lib/firebase');
+const createTasksInFirestore: FirebaseModule['createTasksInFirestore'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.createTasksInFirestore(...args));
+const removeTaskFromFirestore: FirebaseModule['removeTaskFromFirestore'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.removeTaskFromFirestore(...args));
+const updateTaskInFirestore: FirebaseModule['updateTaskInFirestore'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.updateTaskInFirestore(...args));
 
 export type ListGroupBy = 'priority' | 'due_date' | 'status';
 export type ListSortBy = 'priority' | 'due_date' | 'title' | 'newest';

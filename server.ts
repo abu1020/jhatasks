@@ -266,7 +266,18 @@ async function startServer() {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('X-Frame-Options', 'DENY');
-    // Reject browser-originated cross-site writes. SameSite cookies are a second layer.
+    // SameSite cookies and Fetch Metadata block browser cross-site writes; validate Origin too.
+    const origin = req.get('origin');
+    if (req.path.startsWith('/api/') && origin) {
+      const requestHost = String(req.get('x-forwarded-host') || req.get('host') || '').split(',')[0].trim();
+      try {
+        if (new URL(origin).host.toLowerCase() !== requestHost.toLowerCase()) {
+          return res.status(403).json({ error: 'Cross-origin API request blocked' });
+        }
+      } catch {
+        return res.status(403).json({ error: 'Invalid request origin' });
+      }
+    }
     if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) && req.get('sec-fetch-site') === 'cross-site') {
       return res.status(403).json({ error: 'Cross-site request denied' });
     }

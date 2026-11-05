@@ -26,15 +26,22 @@ import {
 } from 'lucide-react';
 import { isSafeExternalUrl, type Attachment, type Task } from '../../db/schema';
 import { formatHumanDate, formatTime12h, getTodayStr } from '../../lib/dateUtils';
-import {
-  createGoogleTaskLive,
-  deleteGoogleTaskLive,
-  fetchGmailNotificationsLive,
-  fetchGoogleDriveRecentFiles,
-  fetchGoogleTasksLive,
-  googleSignIn,
-  pullTasksFromGoogleSheet,
-} from '../../lib/firebase';
+type FirebaseModule = typeof import('../../lib/firebase');
+const loadFirebase = () => import('../../lib/firebase');
+const createGoogleTaskLive: FirebaseModule['createGoogleTaskLive'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.createGoogleTaskLive(...args));
+const deleteGoogleTaskLive: FirebaseModule['deleteGoogleTaskLive'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.deleteGoogleTaskLive(...args));
+const fetchGmailNotificationsLive: FirebaseModule['fetchGmailNotificationsLive'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.fetchGmailNotificationsLive(...args));
+const fetchGoogleDriveRecentFiles: FirebaseModule['fetchGoogleDriveRecentFiles'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.fetchGoogleDriveRecentFiles(...args));
+const fetchGoogleTasksLive: FirebaseModule['fetchGoogleTasksLive'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.fetchGoogleTasksLive(...args));
+const googleSignIn: FirebaseModule['googleSignIn'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.googleSignIn(...args));
+const pullTasksFromGoogleSheet: FirebaseModule['pullTasksFromGoogleSheet'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.pullTasksFromGoogleSheet(...args));
 import {
   extractOtpFromText,
   parseGoogleTasksV1Json,

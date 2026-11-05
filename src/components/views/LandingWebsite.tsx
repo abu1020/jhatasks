@@ -20,7 +20,12 @@ import {
   type CustomizationPlanId,
 } from '../../store/useCadenceStore';
 import { parseTaskInput } from '../../lib/nlpParser';
-import { googleSignIn, logout } from '../../lib/firebase';
+type FirebaseModule = typeof import('../../lib/firebase');
+const loadFirebase = () => import('../../lib/firebase');
+const googleSignIn: FirebaseModule['googleSignIn'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.googleSignIn(...args));
+const logout: FirebaseModule['logout'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.logout(...args));
 import { BrandLockup } from '../ui/Brand';
 import type { ViewId } from '../../db/schema';
 

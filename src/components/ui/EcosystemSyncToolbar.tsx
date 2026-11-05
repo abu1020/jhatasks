@@ -6,11 +6,14 @@ import {
   RefreshCw,
   Sparkles,
 } from 'lucide-react';
-import {
-  fetchGmailNotificationsLive,
-  fetchGoogleTasksLive,
-  googleSignIn,
-} from '../../lib/firebase';
+type FirebaseModule = typeof import('../../lib/firebase');
+const loadFirebase = () => import('../../lib/firebase');
+const fetchGmailNotificationsLive: FirebaseModule['fetchGmailNotificationsLive'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.fetchGmailNotificationsLive(...args));
+const fetchGoogleTasksLive: FirebaseModule['fetchGoogleTasksLive'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.fetchGoogleTasksLive(...args));
+const googleSignIn: FirebaseModule['googleSignIn'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.googleSignIn(...args));
 import { useCadenceStore } from '../../store/useCadenceStore';
 
 export function EcosystemSyncToolbar() {

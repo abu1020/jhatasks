@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import {
@@ -43,14 +43,20 @@ import {
 } from 'lucide-react';
 import type { Task, ViewId, WorkspaceFilter } from '../../db/schema';
 import { computeTodayProgress, getTodayStr } from '../../lib/dateUtils';
-import {
-  fetchFirestoreUserTasksAndEvents,
-  fetchGmailNotificationsLive,
-  fetchGoogleCalendarLiveEvents,
-  fetchGoogleTasksLive,
-  googleSignIn,
-  logout,
-} from '../../lib/firebase';
+type FirebaseModule = typeof import('../../lib/firebase');
+const loadFirebase = () => import('../../lib/firebase');
+const fetchFirestoreUserTasksAndEvents: FirebaseModule['fetchFirestoreUserTasksAndEvents'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.fetchFirestoreUserTasksAndEvents(...args));
+const fetchGmailNotificationsLive: FirebaseModule['fetchGmailNotificationsLive'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.fetchGmailNotificationsLive(...args));
+const fetchGoogleCalendarLiveEvents: FirebaseModule['fetchGoogleCalendarLiveEvents'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.fetchGoogleCalendarLiveEvents(...args));
+const fetchGoogleTasksLive: FirebaseModule['fetchGoogleTasksLive'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.fetchGoogleTasksLive(...args));
+const googleSignIn: FirebaseModule['googleSignIn'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.googleSignIn(...args));
+const logout: FirebaseModule['logout'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.logout(...args));
 import { parseGoogleTasksV1Json, type GmailNotificationItem } from '../../lib/nlpParser';
 import { useCadenceStore } from '../../store/useCadenceStore';
 import { ProgressRing } from '../ui/Primitives';
@@ -1258,9 +1264,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!hasGoogleToken) return;
     let cancelled = false;
+    let pollInFlight = false;
 
     const poll = async () => {
-      if (cancelled) return;
+      if (cancelled || pollInFlight) return;
+      pollInFlight = true;
       setGmailPollStatus('polling');
       try {
         const items = await fetchGmailNotificationsLive(userEmail);
@@ -1283,6 +1291,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             setGmailPollStatus('error');
           }
         }
+      } finally {
+        pollInFlight = false;
       }
     };
 
@@ -1309,14 +1319,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, [hasGoogleToken, userEmail, ingestGmailNotifications, setGmailPollStatus, setAuthUser]);
 
-  const unreadNotifCount = notifications.filter((n) => !n.read).length;
-  const hasUnreadOtp = notifications.some((n) => !n.read && n.category === 'otp');
-
-  const scopedTasks = tasks.filter(
-    (t) => workspace === 'all' || t.workspace === workspace
+  const unreadNotifCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
+  const hasUnreadOtp = useMemo(
+    () => notifications.some((n) => !n.read && n.category === 'otp'),
+    [notifications]
   );
-  const openTaskCount = scopedTasks.filter((t) => t.status !== 'done').length;
-  const todayStats = computeTodayProgress(scopedTasks, getTodayStr());
+  const scopedTasks = useMemo(
+    () => tasks.filter((task) => workspace === 'all' || task.workspace === workspace),
+    [tasks, workspace]
+  );
+  const openTaskCount = useMemo(
+    () => scopedTasks.filter((task) => task.status !== 'done').length,
+    [scopedTasks]
+  );
+  const today = getTodayStr();
+  const todayStats = useMemo(() => computeTodayProgress(scopedTasks, today), [scopedTasks, today]);
 
   const currentViewMeta =
     VIEW_CONFIG.find((v) => v.id === activeView) || VIEW_CONFIG[0];
