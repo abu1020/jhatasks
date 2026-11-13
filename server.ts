@@ -258,10 +258,9 @@ function buildSeedEvents(now: Date = new Date()): CalendarEvent[] {
 
 export const app = express();
 
-async function startServer() {
-  app.disable('x-powered-by');
-  app.set('trust proxy', 1);
-  app.use((req, res, next) => {
+app.disable('x-powered-by');
+app.set('trust proxy', 1);
+app.use((req, res, next) => {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
@@ -741,24 +740,27 @@ async function startServer() {
   });
   app.use('/api', (_req, res) => res.status(404).json({ error: 'API route not found' }));
 
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(__dirname, 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+  if (!process.env.VERCEL) {
+    if (process.env.NODE_ENV !== 'production') {
+      createViteServer({
+        server: { middlewareMode: true },
+        appType: 'spa',
+      }).then((vite) => {
+        app.use(vite.middlewares);
+        const PORT = Number(process.env.PORT) || 3000;
+        app.listen(PORT, '0.0.0.0', () => {
+          console.log(`Cadence Focus OS server running on http://0.0.0.0:${PORT}`);
+        });
+      });
+    } else {
+      const distPath = path.join(__dirname, 'dist');
+      app.use(express.static(distPath));
+      app.get('*', (_req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+      const PORT = Number(process.env.PORT) || 3000;
+      app.listen(PORT, '0.0.0.0', () => {
+        console.log(`Cadence Focus OS server running on http://0.0.0.0:${PORT}`);
+      });
+    }
   }
-
-  const PORT = Number(process.env.PORT) || 3000;
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Cadence Focus OS server running on http://0.0.0.0:${PORT}`);
-  });
-}
-
-void startServer();
