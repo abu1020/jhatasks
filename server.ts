@@ -256,29 +256,105 @@ function buildSeedEvents(now: Date = new Date()): CalendarEvent[] {
   ];
 }
 
+// ---------------------------------------------------------------------------
+// Reverse-proxy aware helpers (preview sandboxes, Vercel, custom ingress)
+// ---------------------------------------------------------------------------
+
+// Hosts allowed to embed the app in an iframe. The Arena/sandbox preview serves the app from
+// https://<port>-<sandbox>.e2b.app, so a blanket `X-Frame-Options: DENY` renders a blank frame
+// instead of the application. Override with a comma separated FRAME_ANCESTORS list.
+const FRAME_ANCESTORS = (process.env.FRAME_ANCESTORS || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
+const DEFAULT_FRAME_ANCESTORS = process.env.NODE_ENV === 'production' ? [] : ['https://*.e2b.app'];
+const allowedFrameAncestors = FRAME_ANCESTORS.length > 0 ? FRAME_ANCESTORS : DEFAULT_FRAME_ANCESTORS;
+// Only `frame-ancestors` is sent (never script/style directives) so the inline bootstrap
+// scripts in index.html keep executing.
+const frameAncestorsPolicy = ["'self'", ...allowedFrameAncestors].join(' ');
+
+// Public origin of the deployment, when a proxy rewrites the Host header.
+const PUBLIC_APP_HOST = (() => {
+  const raw = process.env.PUBLIC_APP_ORIGIN || process.env.APP_URL || '';
+  if (!raw) return '';
+  try {
+    return new URL(raw).host.toLowerCase();
+  } catch {
+    return '';
+  }
+})();
+
+const STATE_CHANGING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+const CACHEABLE_ASSET = /\.(?:js|mjs|css|woff2?|ttf|otf|eot|svg|png|jpe?g|gif|webp|avif|ico|map|json)$/i;
+
+function isCacheableAssetPath(requestPath: string): boolean {
+  return requestPath.startsWith('/assets/') || CACHEABLE_ASSET.test(requestPath);
+}
+
+function normalizeHost(value: unknown): string {
+  return String(value || '')
+    .split(',')[0]
+    .trim()
+    .toLowerCase()
+    .replace(/:\d+$/, '');
+}
+
+// Behind a proxy the public host can arrive as X-Forwarded-Host, stay in the Host header, or
+// both. Comparing against every candidate avoids rejecting legitimate same-origin API writes.
+function isSameHostAsRequest(req: express.Request, originHost: string): boolean {
+  const target = normalizeHost(originHost);
+  if (!target) return false;
+  const candidates = [
+    req.get('x-forwarded-host'),
+    req.hostname, // trust-proxy aware: resolves X-Forwarded-Host when `trust proxy` is on
+    req.get('host'),
+    PUBLIC_APP_HOST,
+  ];
+  return candidates.some((candidate) => {
+    const normalized = normalizeHost(candidate);
+    return normalized !== '' && normalized === target;
+  });
+}
+
 export const app = express();
 
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
 app.use((req, res, next) => {
-    res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    res.setHeader('X-Frame-Options', 'DENY');
-    // SameSite cookies and Fetch Metadata block browser cross-site writes; validate Origin too.
+    // Clickjacking defence that still lets trusted hosts (incl. the preview proxy) embed the app.
+    res.setHeader('Content-Security-Policy', `frame-ancestors ${frameAncestorsPolicy};`);
+    if (allowedFrameAncestors.length === 0) {
+      // Legacy browsers that ignore `frame-ancestors` fall back to the equivalent header.
+      res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    }
+    // Build output is content-hashed and must stay cacheable; everything else is dynamic.
+    if (!isCacheableAssetPath(req.path)) {
+      res.setHeader('Cache-Control', 'no-store');
+    }
+    // `Sec-Fetch-Site` is browser-supplied and cannot be forged by a page, so when present it is
+    // the authoritative CSRF signal. Unlike an Origin comparison it stays correct when a proxy
+    // rewrites the Host header (preview sandboxes, Vercel, custom ingress).
+    const fetchSite = req.get('sec-fetch-site');
+    const hasFetchMetadata = typeof fetchSite === 'string' && fetchSite.length > 0;
+    if (hasFetchMetadata && STATE_CHANGING_METHODS.has(req.method) && fetchSite === 'cross-site') {
+      return res.status(403).json({ error: 'Cross-site request denied' });
+    }
+    // SameSite cookies and Fetch Metadata block browser cross-site writes; also validate Origin
+    // for clients that do not send Fetch Metadata headers.
     const origin = req.get('origin');
-    if (req.path.startsWith('/api/') && origin) {
-      const requestHost = String(req.get('x-forwarded-host') || req.get('host') || '').split(',')[0].trim();
+    if (!hasFetchMetadata && req.path.startsWith('/api/') && origin) {
+      let originHost = '';
       try {
-        if (new URL(origin).host.toLowerCase() !== requestHost.toLowerCase()) {
-          return res.status(403).json({ error: 'Cross-origin API request blocked' });
-        }
+        originHost = new URL(origin).host;
       } catch {
         return res.status(403).json({ error: 'Invalid request origin' });
       }
-    }
-    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) && req.get('sec-fetch-site') === 'cross-site') {
-      return res.status(403).json({ error: 'Cross-site request denied' });
+      if (!isSameHostAsRequest(req, originHost)) {
+        return res.status(403).json({ error: 'Cross-origin API request blocked' });
+      }
     }
     const cookie = req.headers.cookie?.split(';').map((part) => part.trim()).find((part) => part.startsWith(`${SESSION_COOKIE}=`));
     let sessionId = cookie?.slice(SESSION_COOKIE.length + 1) || '';
@@ -754,7 +830,12 @@ app.use((req, res, next) => {
       });
     } else {
       const distPath = path.join(__dirname, 'dist');
-      app.use(express.static(distPath));
+      // Vite emits content-hashed filenames under /assets, so they are safe to cache forever.
+      app.use(
+        '/assets',
+        express.static(path.join(distPath, 'assets'), { immutable: true, maxAge: '1y' })
+      );
+      app.use(express.static(distPath, { maxAge: 0 }));
       app.get('*', (_req, res) => {
         res.sendFile(path.join(distPath, 'index.html'));
       });
