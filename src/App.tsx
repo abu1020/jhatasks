@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useEffect } from 'react';
-import { MotionConfig } from 'motion/react';
+import { MotionConfig, motion } from 'motion/react';
 import { AppShell } from './components/shell/Shell';
 import { ParticleBurstOverlay, ToastViewport } from './components/ui/Primitives';
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
@@ -308,12 +308,21 @@ export default function App() {
                     </div>
                   }
                 >
-                  {activeView === 'my_day' && <MyDayView />}
-                  {activeView === 'board' && <BoardView />}
-                  {activeView === 'list' && <ListView />}
-                  {activeView === 'calendar' && <CalendarView />}
-                  {activeView === 'matrix' && <MatrixView />}
-                  {activeView === 'insights' && <InsightsView />}
+                  {/* Keyed on the view so each switch animates in. Transform/opacity only, so it
+                      stays on the compositor and never blocks interaction. */}
+                  <motion.div
+                    key={activeView}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
+                  >
+                    {activeView === 'my_day' && <MyDayView />}
+                    {activeView === 'board' && <BoardView />}
+                    {activeView === 'list' && <ListView />}
+                    {activeView === 'calendar' && <CalendarView />}
+                    {activeView === 'matrix' && <MatrixView />}
+                    {activeView === 'insights' && <InsightsView />}
+                  </motion.div>
                 </Suspense>
               </ErrorBoundary>
             </AppShell>

@@ -44,7 +44,9 @@ export function BrandLockup({
           cadence<span className="text-[var(--accent)]">.</span>
         </span>
         {!compact && (
-          <span className="mt-1 text-[8px] font-bold uppercase tracking-[0.19em] text-[var(--text-3)]">
+          // The tagline is the widest part of the lockup; hide it on small screens so the
+          // header's primary CTA has room instead of being clipped off-canvas.
+          <span className="mt-1 hidden text-[8px] font-bold uppercase tracking-[0.19em] text-[var(--text-3)] sm:block">
             Focus, in rhythm
           </span>
         )}

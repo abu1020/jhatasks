@@ -29,6 +29,7 @@ const googleSignInRedirect: FirebaseModule['googleSignInRedirect'] = (...args) =
 const logout: FirebaseModule['logout'] = (...args) =>
   loadFirebase().then((firebase) => firebase.logout(...args));
 import { BrandLockup } from '../ui/Brand';
+import { Reveal } from '../ui/Reveal';
 import type { ViewId } from '../../db/schema';
 
 interface PrimaryContrastTier {
@@ -384,7 +385,7 @@ export function LandingWebsite() {
     <div className="min-h-dvh bg-[var(--bg)] text-[var(--text-1)] relative z-10">
       {/* 1. COMPACT 3-ZONE TOP BAR WITH AUTH & CTAS */}
       <header className="sticky top-0 z-40 glass border-b border-[var(--border)]">
-        <div className="max-w-[1280px] mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-2 sm:gap-6">
+        <div className="max-w-[1280px] mx-auto px-3 sm:px-4 lg:px-6 h-14 flex items-center justify-between gap-3 sm:gap-6">
           {/* Zone 1: Single text element Brand Wordmark */}
           <a
             href="#top"
@@ -401,29 +402,29 @@ export function LandingWebsite() {
           {/* Zone 2: 4 concise navigation links */}
           <nav
             aria-label="Primary website navigation"
-            className="hidden md:flex items-center gap-6 text-xs sm:text-sm font-medium text-[var(--text-2)]"
+            className="hidden lg:flex items-center gap-6 text-xs sm:text-sm font-medium text-[var(--text-2)]"
           >
             <a
               href="#features"
-              className="hover:text-[var(--text-1)] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+              className="link-underline inline-flex items-center py-2 hover:text-[var(--text-1)] transition-colors whitespace-nowrap shrink-0 md:py-0"
             >
               Features
             </a>
             <a
               href="#ecosystem"
-              className="hover:text-[var(--text-1)] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+              className="link-underline inline-flex items-center py-2 hover:text-[var(--text-1)] transition-colors whitespace-nowrap shrink-0 md:py-0"
             >
               Google Sync
             </a>
             <a
               href="#pricing"
-              className="hover:text-[var(--text-1)] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+              className="link-underline inline-flex items-center py-2 hover:text-[var(--text-1)] transition-colors whitespace-nowrap shrink-0 md:py-0"
             >
               Pricing
             </a>
             <a
               href="#customizations"
-              className="hover:text-[var(--text-1)] hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+              className="link-underline inline-flex items-center py-2 hover:text-[var(--text-1)] transition-colors whitespace-nowrap shrink-0 md:py-0"
             >
               Customizations
             </a>
@@ -455,7 +456,7 @@ export function LandingWebsite() {
                 <button
                   type="button"
                   onClick={handleSignOut}
-                  className="btn-ghost p-1.5 rounded-lg text-xs text-[var(--text-3)] hover:text-[#F43F5E]"
+                  className="btn-ghost p-1.5 rounded-lg text-xs text-[var(--text-3)] hover:text-rose-700 dark:hover:text-rose-400"
                   title="Sign out"
                   aria-label="Sign out"
                 >
@@ -467,7 +468,8 @@ export function LandingWebsite() {
                 type="button"
                 onClick={() => void handleGoogleAuth()}
                 aria-label="Sign in with Google"
-                className="btn-ghost px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold text-[var(--text-2)] hover:text-[var(--text-1)] inline-flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                title="Sign in with Google"
+                className="btn-ghost inline-flex items-center justify-center gap-1 sm:gap-1.5 px-3 py-2 sm:px-3 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold text-[var(--text-2)] hover:text-[var(--text-1)] whitespace-nowrap shrink-0 min-h-[32px] min-w-[40px] sm:min-h-0 sm:min-w-0 cursor-pointer"
               >
                 <LogIn className="w-3.5 h-3.5 shrink-0" />
                 <span className="sm:hidden">Sign In</span>
@@ -479,21 +481,21 @@ export function LandingWebsite() {
               <button
                 type="button"
                 onClick={() => handleLaunchWorkspace('my_day')}
-                className="btn-accent px-2.5 sm:px-3.5 py-1.5 rounded-xl text-[11px] sm:text-sm font-semibold whitespace-nowrap shrink-0 inline-flex items-center gap-1 sm:gap-1.5 shadow-sm"
+                className="btn-accent inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-1.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap shrink-0 min-h-[32px] min-w-[40px] sm:min-h-0 sm:min-w-0 shadow-sm"
               >
                 <span className="sm:hidden">Workspace</span>
                 <span className="hidden sm:inline">Open Workspace</span>
-                <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+                <ArrowRight className="hidden w-3.5 h-3.5 sm:block" />
               </button>
             ) : (
               <button
                 type="button"
                 onClick={handleStartForFree}
-                className="btn-accent px-2.5 sm:px-3.5 py-1.5 rounded-xl text-[11px] sm:text-sm font-semibold whitespace-nowrap shrink-0 inline-flex items-center gap-1 sm:gap-1.5 shadow-sm cursor-pointer"
+                className="btn-accent inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:px-3.5 sm:py-1.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap shrink-0 min-h-[32px] min-w-[40px] sm:min-h-0 sm:min-w-0 shadow-sm cursor-pointer"
               >
                 <span className="sm:hidden">Start Free</span>
                 <span className="hidden sm:inline">Start for Free</span>
-                <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+                <ArrowRight className="hidden w-3.5 h-3.5 sm:block" />
               </button>
             )}
           </div>
@@ -506,9 +508,9 @@ export function LandingWebsite() {
           role="dialog"
           aria-modal="true"
           aria-label="Google Account Authentication"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+          className="animate-fade-in fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
         >
-          <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-[#0F172A] border border-slate-300 dark:border-slate-700 p-5 shadow-2xl space-y-4 text-slate-900 dark:text-slate-100">
+          <div className="animate-pop-in w-full max-w-sm rounded-2xl bg-white dark:bg-[#0F172A] border border-slate-300 dark:border-slate-700 p-5 shadow-2xl space-y-4 text-slate-900 dark:text-slate-100">
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
               <div className="space-y-0.5">
                 <h3 className="font-display text-base font-bold text-slate-900 dark:text-white">
@@ -569,17 +571,17 @@ export function LandingWebsite() {
 
       <main id="top" className="max-w-[1280px] mx-auto px-4 sm:px-6">
         {/* 2. COMPACT, HIGH-POWER HERO */}
-        <section className="pt-6 sm:pt-8 pb-8 border-b border-[var(--border)]">
+        <section className="pt-8 sm:pt-12 pb-12 sm:pb-16 border-b border-[var(--border)]">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
             {/* Left Column: Proposition, Live Quick NLP Capture & Controls */}
-            <div className="lg:col-span-6 space-y-4">
+            <div className="lg:col-span-6 space-y-4 reveal-stagger">
               <div className="space-y-3">
                 <div className="flex items-center flex-wrap gap-2 text-xs font-medium text-[var(--text-3)]">
                   <span>Focus OS</span>
                   <span aria-hidden="true">·</span>
                   <span>Professional Version</span>
                   <span aria-hidden="true">·</span>
-                  <span className="text-[#10B981] font-semibold">
+                  <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
                     Product Developed & Distributed by Jha Solutions
                   </span>
                 </div>
@@ -658,7 +660,7 @@ export function LandingWebsite() {
 
               {/* CTAs & Quick Aesthetic Controls */}
               <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                <div className="flex items-center gap-2.5">
+                <div className="flex flex-wrap items-center gap-2.5">
                   {userEmail ? (
                     <button
                       type="button"
@@ -682,7 +684,8 @@ export function LandingWebsite() {
                     href="#pricing"
                     className="btn-ghost px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-[var(--text-1)] whitespace-nowrap"
                   >
-                    View Pricing (₹0 · ₹499 · ₹3,999)
+                    <span className="sm:hidden">View Pricing</span>
+                    <span className="hidden sm:inline">View Pricing (₹0 · ₹499 · ₹3,999)</span>
                   </a>
                 </div>
 
@@ -697,7 +700,7 @@ export function LandingWebsite() {
                         key={ws}
                         type="button"
                         onClick={() => setWorkspace(ws)}
-                        className={`px-2 py-0.5 rounded-md text-[11px] font-medium capitalize transition whitespace-nowrap ${
+                        className={`inline-flex items-center justify-center px-2 py-2 sm:py-0.5 rounded-md text-[11px] font-medium capitalize transition whitespace-nowrap min-w-[40px] min-h-[32px] sm:min-w-0 sm:min-h-0 ${
                           workspace === ws
                             ? 'bg-[var(--surface-2)] text-[var(--text-1)] shadow-xs'
                             : 'text-[var(--text-3)] hover:text-[var(--text-1)]'
@@ -710,7 +713,7 @@ export function LandingWebsite() {
                   <button
                     type="button"
                     onClick={toggleTheme}
-                    className="btn-ghost p-1.5 rounded-lg text-xs text-[var(--text-2)] hover:text-[var(--text-1)]"
+                    className="btn-ghost p-1.5 rounded-lg text-xs text-[var(--text-2)] hover:text-[var(--text-1)] min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 inline-flex items-center justify-center"
                     aria-label="Toggle theme"
                   >
                     {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
@@ -722,12 +725,12 @@ export function LandingWebsite() {
             {/* Right Column: Compact Live Product Preview */}
             <div className="lg:col-span-6">
               <div className="card p-4 sm:p-5 space-y-3.5">
-                <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] pb-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-2.5">
                   <div className="text-xs font-bold text-[var(--text-1)]">
                     Live Engine Showcase
                   </div>
                   <div
-                    className="inline-flex items-center p-0.5 rounded-lg bg-[var(--surface-1)] border border-[var(--border)]"
+                    className="inline-flex max-w-full items-center overflow-x-auto p-0.5 rounded-lg bg-[var(--surface-1)] border border-[var(--border)]"
                     role="tablist"
                   >
                     <button
@@ -735,7 +738,7 @@ export function LandingWebsite() {
                       role="tab"
                       aria-selected={heroTab === 'my_day'}
                       onClick={() => setHeroTab('my_day')}
-                      className={`px-2 py-1 rounded-md text-[11px] font-semibold transition whitespace-nowrap ${
+                      className={`inline-flex items-center justify-center px-2 py-2 sm:py-1 rounded-md text-[11px] font-semibold transition whitespace-nowrap min-h-[32px] sm:min-h-0 ${
                         heroTab === 'my_day'
                           ? 'bg-[var(--surface-2)] text-[var(--text-1)] shadow-xs'
                           : 'text-[var(--text-3)] hover:text-[var(--text-1)]'
@@ -748,7 +751,7 @@ export function LandingWebsite() {
                       role="tab"
                       aria-selected={heroTab === 'google_sync'}
                       onClick={() => setHeroTab('google_sync')}
-                      className={`px-2 py-1 rounded-md text-[11px] font-semibold transition whitespace-nowrap ${
+                      className={`inline-flex items-center justify-center px-2 py-2 sm:py-1 rounded-md text-[11px] font-semibold transition whitespace-nowrap min-h-[32px] sm:min-h-0 ${
                         heroTab === 'google_sync'
                           ? 'bg-[var(--surface-2)] text-[var(--text-1)] shadow-xs'
                           : 'text-[var(--text-3)] hover:text-[var(--text-1)]'
@@ -761,7 +764,7 @@ export function LandingWebsite() {
                       role="tab"
                       aria-selected={heroTab === 'gmail_otp'}
                       onClick={() => setHeroTab('gmail_otp')}
-                      className={`px-2 py-1 rounded-md text-[11px] font-semibold transition whitespace-nowrap ${
+                      className={`inline-flex items-center justify-center px-2 py-2 sm:py-1 rounded-md text-[11px] font-semibold transition whitespace-nowrap min-h-[32px] sm:min-h-0 ${
                         heroTab === 'gmail_otp'
                           ? 'bg-[var(--surface-2)] text-[var(--text-1)] shadow-xs'
                           : 'text-[var(--text-3)] hover:text-[var(--text-1)]'
@@ -796,7 +799,7 @@ export function LandingWebsite() {
                           10:30 AM · 45m focus sprint · Office
                         </div>
                       </div>
-                      <span className="text-[11px] font-semibold text-[#F43F5E]">
+                      <span className="text-[11px] font-semibold text-rose-700 dark:text-rose-400">
                         Urgent
                       </span>
                     </div>
@@ -854,7 +857,7 @@ export function LandingWebsite() {
                       <span className="font-semibold text-[var(--text-1)]">
                         15s Real-Time Gmail Polling
                       </span>
-                      <span className="text-[11px] text-[#10B981] font-semibold">
+                      <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold">
                         Live Inbox
                       </span>
                     </div>
@@ -882,7 +885,7 @@ export function LandingWebsite() {
                   <button
                     type="button"
                     onClick={handleStartForFree}
-                    className="font-semibold text-[var(--accent)] hover:underline whitespace-nowrap"
+                    className="press link-underline inline-flex items-center py-2.5 font-semibold text-[var(--accent)] whitespace-nowrap sm:py-0 min-h-[32px] sm:min-h-0"
                   >
                     Enter Workspace →
                   </button>
@@ -927,7 +930,7 @@ export function LandingWebsite() {
               </div>
             </div>
             <div className="space-y-0.5">
-              <div className="font-display text-xl sm:text-2xl font-bold text-[#10B981] tnum">
+              <div className="font-display text-xl sm:text-2xl font-bold text-emerald-700 dark:text-emerald-400 tnum">
                 ₹3,999 Once
               </div>
               <div className="text-xs font-semibold text-[var(--text-2)]">
@@ -941,7 +944,7 @@ export function LandingWebsite() {
         </section>
 
         {/* 3. COMPACT 4-FEATURE BENTO GRID */}
-        <section id="features" className="py-8 border-b border-[var(--border)] space-y-5">
+        <Reveal as="section" id="features" stagger className="py-12 sm:py-16 border-b border-[var(--border)] space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
             <div className="space-y-1">
               <div className="text-xs font-semibold text-[var(--accent)]">
@@ -954,7 +957,7 @@ export function LandingWebsite() {
             <button
               type="button"
               onClick={handleStartForFree}
-              className="text-xs font-semibold text-[var(--accent)] hover:underline whitespace-nowrap"
+              className="press link-underline inline-flex items-center py-2.5 text-xs font-semibold text-[var(--accent)] whitespace-nowrap sm:py-0 min-h-[32px] sm:min-h-0"
             >
               Start for Free →
             </button>
@@ -964,7 +967,7 @@ export function LandingWebsite() {
             id="ecosystem"
             className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5"
           >
-            <div className="card p-4 flex flex-col justify-between space-y-3">
+            <div className="card hover-lift p-5 flex flex-col justify-between space-y-3">
               <div className="space-y-1.5">
                 <div className="text-xs font-bold text-[var(--text-1)]">
                   01. Six Focus Views
@@ -982,7 +985,7 @@ export function LandingWebsite() {
               </button>
             </div>
 
-            <div className="card p-4 flex flex-col justify-between space-y-3">
+            <div className="card hover-lift p-5 flex flex-col justify-between space-y-3">
               <div className="space-y-1.5">
                 <div className="text-xs font-bold text-[var(--text-1)]">
                   02. Google Tasks v1 JSON
@@ -1001,7 +1004,7 @@ export function LandingWebsite() {
               </button>
             </div>
 
-            <div className="card p-4 flex flex-col justify-between space-y-3">
+            <div className="card hover-lift p-5 flex flex-col justify-between space-y-3">
               <div className="space-y-1.5">
                 <div className="text-xs font-bold text-[var(--text-1)]">
                   03. Google Sheets Sync
@@ -1020,7 +1023,7 @@ export function LandingWebsite() {
               </button>
             </div>
 
-            <div className="card p-4 flex flex-col justify-between space-y-3">
+            <div className="card hover-lift p-5 flex flex-col justify-between space-y-3">
               <div className="space-y-1.5">
                 <div className="text-xs font-bold text-[var(--text-1)]">
                   04. Real-Time Gmail OTP
@@ -1039,10 +1042,10 @@ export function LandingWebsite() {
               </button>
             </div>
           </div>
-        </section>
+        </Reveal>
 
         {/* 4. VISUALLY CONTRASTED PRICING SECTION */}
-        <section id="pricing" className="py-8 border-b border-[var(--border)] space-y-6">
+        <Reveal as="section" id="pricing" stagger className="py-12 sm:py-16 border-b border-[var(--border)] space-y-8">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div className="space-y-1">
               <div className="text-xs font-semibold text-[var(--accent)]">
@@ -1071,10 +1074,10 @@ export function LandingWebsite() {
               const isLifetime = tier.visualVariant === 'lifetime_signature';
 
               const cardClasses = isLifetime
-                ? 'rounded-2xl p-5 sm:p-6 flex flex-col justify-between space-y-5 bg-slate-900 dark:bg-indigo-950/90 text-white border-2 border-indigo-400/60 shadow-xl'
+                ? 'hover-lift rounded-2xl p-5 sm:p-6 flex flex-col justify-between space-y-5 bg-slate-900 dark:bg-indigo-950/90 text-white border-2 border-indigo-400/60 shadow-xl'
                 : isYearly
-                ? 'rounded-2xl p-5 sm:p-6 flex flex-col justify-between space-y-5 bg-[var(--surface-2)] text-[var(--text-1)] border-2 border-[var(--accent)] ring-4 ring-[var(--accent)]/10 shadow-lg'
-                : 'rounded-2xl p-5 sm:p-6 flex flex-col justify-between space-y-5 bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border)] shadow-xs';
+                ? 'hover-lift rounded-2xl p-5 sm:p-6 flex flex-col justify-between space-y-5 bg-[var(--surface-2)] text-[var(--text-1)] border-2 border-[var(--accent)] ring-4 ring-[var(--accent)]/10 shadow-lg'
+                : 'hover-lift rounded-2xl p-5 sm:p-6 flex flex-col justify-between space-y-5 bg-[var(--surface-2)] text-[var(--text-1)] border border-[var(--border)] shadow-xs';
 
               return (
                 <div key={tier.id} className={cardClasses}>
@@ -1086,7 +1089,7 @@ export function LandingWebsite() {
                             ? 'text-indigo-300'
                             : isYearly
                             ? 'text-[var(--accent)]'
-                            : 'text-[#10B981]'
+                            : 'text-emerald-700 dark:text-emerald-400'
                         }`}
                       >
                         {tier.tierOverline}
@@ -1160,7 +1163,7 @@ export function LandingWebsite() {
                                 ? 'text-indigo-300'
                                 : isYearly
                                 ? 'text-[var(--accent)]'
-                                : 'text-[#10B981]'
+                                : 'text-emerald-700 dark:text-emerald-400'
                             }`}
                           />
                           <span>{feat}</span>
@@ -1172,7 +1175,7 @@ export function LandingWebsite() {
                   <button
                     type="button"
                     onClick={() => handleSelectTier(tier.id)}
-                    className={`w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-semibold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap ${
+                    className={`w-full py-3 px-4 rounded-xl text-xs sm:text-sm font-semibold transition inline-flex items-center justify-center gap-1.5 whitespace-nowrap min-h-[40px] ${
                       isLifetime
                         ? 'bg-white text-slate-900 hover:bg-indigo-50 shadow-sm'
                         : isYearly
@@ -1250,10 +1253,10 @@ export function LandingWebsite() {
               </table>
             </div>
           </div>
-        </section>
+        </Reveal>
 
         {/* 5. COMPACT LIVE CUSTOMIZATION STUDIO */}
-        <section id="customizations" className="py-8 space-y-5">
+        <Reveal as="section" id="customizations" stagger className="py-12 sm:py-16 space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             <div className="lg:col-span-5 space-y-3">
               <div className="text-xs font-semibold text-[var(--accent)]">
@@ -1412,13 +1415,13 @@ export function LandingWebsite() {
                 </div>
 
                 {formError && (
-                  <div className="p-2 rounded-lg bg-[#F43F5E]/10 border border-[#F43F5E]/30 text-xs text-[#F43F5E]">
+                  <div className="p-2 rounded-lg bg-[#F43F5E]/10 border border-[#F43F5E]/30 text-xs text-rose-700 dark:text-rose-400">
                     {formError}
                   </div>
                 )}
 
                 {submittedPlan && (
-                  <div className="p-2.5 rounded-lg bg-[#10B981]/15 border border-[#10B981]/30 text-xs text-[#10B981] flex items-center justify-between gap-2">
+                  <div className="p-2.5 rounded-lg bg-[#10B981]/15 border border-[#10B981]/30 text-xs text-emerald-700 dark:text-emerald-400 flex items-center justify-between gap-2">
                     <span className="inline-flex items-center gap-1.5">
                       <Check className="w-3.5 h-3.5" />
                       <span>Custom profile saved ({focusMins}m/{breakMins}m sprint). Ready in workspace!</span>
@@ -1451,7 +1454,7 @@ export function LandingWebsite() {
               </form>
             </div>
           </div>
-        </section>
+        </Reveal>
       </main>
 
       {/* QUIET FOOTER */}
@@ -1470,19 +1473,19 @@ export function LandingWebsite() {
           </div>
 
           <div className="flex items-center gap-4">
-            <a href="#features" className="hover:text-[var(--text-1)]">
+            <a href="#features" className="link-underline inline-flex items-center justify-center px-1 py-2 hover:text-[var(--text-1)] sm:px-0 sm:py-0 min-w-[40px] min-h-[32px] sm:min-w-0 sm:min-h-0">
               Features
             </a>
-            <a href="#pricing" className="hover:text-[var(--text-1)]">
+            <a href="#pricing" className="link-underline inline-flex items-center justify-center px-1 py-2 hover:text-[var(--text-1)] sm:px-0 sm:py-0 min-w-[40px] min-h-[32px] sm:min-w-0 sm:min-h-0">
               Pricing
             </a>
-            <a href="#customizations" className="hover:text-[var(--text-1)]">
+            <a href="#customizations" className="link-underline inline-flex items-center justify-center px-1 py-2 hover:text-[var(--text-1)] sm:px-0 sm:py-0 min-w-[40px] min-h-[32px] sm:min-w-0 sm:min-h-0">
               Customizations
             </a>
             <button
               type="button"
               onClick={handleStartForFree}
-              className="font-semibold text-[var(--accent)] hover:underline whitespace-nowrap"
+              className="press link-underline inline-flex items-center py-2.5 font-semibold text-[var(--accent)] whitespace-nowrap sm:py-0 min-h-[32px] sm:min-h-0"
             >
               Start for Free →
             </button>

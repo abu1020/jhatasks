@@ -305,7 +305,7 @@ export function MyDayView() {
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
-                            className="px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-[#4F46E5]/12 text-[var(--accent)] hover:bg-[#4F46E5]/20 inline-flex items-center gap-1.5 shrink-0"
+                            className="px-2.5 py-2.5 sm:py-1.5 rounded-lg text-[11px] font-semibold bg-[#4F46E5]/12 text-[var(--accent)] hover:bg-[#4F46E5]/20 inline-flex items-center gap-1.5 shrink-0 min-h-[40px] sm:min-h-0"
                           >
                             <Video className="w-3.5 h-3.5" />
                             <span>Meet</span>

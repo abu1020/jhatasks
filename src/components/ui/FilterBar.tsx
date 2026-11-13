@@ -129,7 +129,7 @@ export function GlobalFilterBar({ matchCount }: { matchCount: number }) {
         <button
           type="button"
           onClick={() => setShowCompleted(!showCompleted)}
-          className="btn-ghost px-2.5 py-1.5 rounded-xl text-xs font-medium inline-flex items-center gap-1.5 min-h-[34px] whitespace-nowrap shrink-0"
+          className="btn-ghost px-2.5 py-2.5 sm:py-1.5 rounded-xl text-xs font-medium inline-flex items-center gap-1.5 min-w-[40px] min-h-[44px] sm:min-w-0 sm:min-h-[34px] justify-center whitespace-nowrap shrink-0"
         >
           {showCompleted ? (
             <>
