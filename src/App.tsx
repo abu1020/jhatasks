@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useEffect } from 'react';
 import { MotionConfig } from 'motion/react';
 import { AppShell } from './components/shell/Shell';
 import { ParticleBurstOverlay, ToastViewport } from './components/ui/Primitives';
+import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { InHouseAssistant } from './components/ui/InHouseAssistant';
 import { useCadenceStore } from './store/useCadenceStore';
 import type { ViewId } from './db/schema';
@@ -39,6 +40,25 @@ const TaskDetailDrawer = lazy(() =>
 const EcosystemModals = lazy(() =>
   import('./components/modals/EcosystemModals').then((m) => ({ default: m.EcosystemModals }))
 );
+
+/**
+ * Runs `task` when the browser is idle and returns a cancel function. The Firebase auth bundle
+ * is large, so restoring the session is scheduled during idle time instead of a fixed timer —
+ * that keeps it from competing with first paint or task hydration.
+ */
+function scheduleOnIdle(task: () => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  const idleWindow = window as Window & {
+    requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+    cancelIdleCallback?: (handle: number) => void;
+  };
+  if (typeof idleWindow.requestIdleCallback === 'function') {
+    const handle = idleWindow.requestIdleCallback(task, { timeout: 2000 });
+    return () => idleWindow.cancelIdleCallback?.(handle);
+  }
+  const timer = window.setTimeout(task, 600);
+  return () => window.clearTimeout(timer);
+}
 
 export default function App() {
   const theme = useCadenceStore((s) => s.theme);
@@ -105,7 +125,7 @@ export default function App() {
     let unsubscribe: (() => void) | undefined;
     void useCadenceStore.getState().hydrateFromApi();
 
-    const authLoadTimer = window.setTimeout(() => {
+    const cancelAuthLoad = scheduleOnIdle(() => {
       void import('./lib/firebase')
         .then(({ fetchFirestoreUserTasksAndEvents, initAuth }) => {
           if (!active) return;
@@ -151,11 +171,11 @@ export default function App() {
             hasToken: false,
           });
         });
-    }, 500);
+    });
 
     return () => {
       active = false;
-      window.clearTimeout(authLoadTimer);
+      cancelAuthLoad();
       unsubscribe?.();
     };
   }, []);
@@ -273,44 +293,50 @@ export default function App() {
   const canViewSoftware = Boolean(userEmail || userUid) && !showLandingPage;
 
   return (
-    <MotionConfig reducedMotion="user">
-      <div className={`${wsClass} min-h-dvh bg-[var(--bg)] text-[var(--text-1)] relative`}>
-        <div className="ambient-glow" aria-hidden="true" />
+    <ErrorBoundary>
+      <MotionConfig reducedMotion="user">
+        <div className={`${wsClass} min-h-dvh bg-[var(--bg)] text-[var(--text-1)] relative`}>
+          <div className="ambient-glow" aria-hidden="true" />
 
-        {is404 ? (
-          <Suspense fallback={<div className="p-8 text-sm text-[var(--text-3)] animate-pulse">Loading...</div>}>
-            <NotFoundView />
-          </Suspense>
-        ) : canViewSoftware ? (
-          <AppShell>
-            <Suspense
-              fallback={
-                <div className="p-8 text-sm text-[var(--text-3)] animate-pulse">
-                  Loading workspace view...
-                </div>
-              }
-            >
-              {activeView === 'my_day' && <MyDayView />}
-              {activeView === 'board' && <BoardView />}
-              {activeView === 'list' && <ListView />}
-              {activeView === 'calendar' && <CalendarView />}
-              {activeView === 'matrix' && <MatrixView />}
-              {activeView === 'insights' && <InsightsView />}
+          {is404 ? (
+            <Suspense fallback={<div className="p-8 text-sm text-[var(--text-3)] animate-pulse">Loading...</div>}>
+              <NotFoundView />
             </Suspense>
-          </AppShell>
-        ) : (
-          <Suspense fallback={<div className="min-h-dvh" aria-busy="true" />}><LandingWebsite /></Suspense>
-        )}
+          ) : canViewSoftware ? (
+            <AppShell>
+              <ErrorBoundary resetKey={activeView} label="This view">
+                <Suspense
+                  fallback={
+                    <div className="p-8 text-sm text-[var(--text-3)] animate-pulse">
+                      Loading workspace view...
+                    </div>
+                  }
+                >
+                  {activeView === 'my_day' && <MyDayView />}
+                  {activeView === 'board' && <BoardView />}
+                  {activeView === 'list' && <ListView />}
+                  {activeView === 'calendar' && <CalendarView />}
+                  {activeView === 'matrix' && <MatrixView />}
+                  {activeView === 'insights' && <InsightsView />}
+                </Suspense>
+              </ErrorBoundary>
+            </AppShell>
+          ) : (
+            <ErrorBoundary label="The landing page">
+              <Suspense fallback={<div className="min-h-dvh" aria-busy="true" />}><LandingWebsite /></Suspense>
+            </ErrorBoundary>
+          )}
 
-        <Suspense fallback={null}>
-          {composerOpen && <TaskComposerModal />}
-          {(selectedTaskId || selectedEvent) && <TaskDetailDrawer />}
-          {(activeModal || commandPaletteOpen) && <EcosystemModals />}
-        </Suspense>
-        <ToastViewport />
-        <ParticleBurstOverlay />
-        {canViewSoftware && <InHouseAssistant />}
-      </div>
-    </MotionConfig>
+          <Suspense fallback={null}>
+            {composerOpen && <TaskComposerModal />}
+            {(selectedTaskId || selectedEvent) && <TaskDetailDrawer />}
+            {(activeModal || commandPaletteOpen) && <EcosystemModals />}
+          </Suspense>
+          <ToastViewport />
+          <ParticleBurstOverlay />
+          {canViewSoftware && <InHouseAssistant />}
+        </div>
+      </MotionConfig>
+    </ErrorBoundary>
   );
 }
