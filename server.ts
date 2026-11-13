@@ -1,5 +1,4 @@
 import express from 'express';
-import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { randomBytes } from 'crypto';
@@ -267,7 +266,13 @@ const FRAME_ANCESTORS = (process.env.FRAME_ANCESTORS || '')
   .split(',')
   .map((value) => value.trim())
   .filter(Boolean);
-const DEFAULT_FRAME_ANCESTORS = process.env.NODE_ENV === 'production' ? [] : ['https://*.e2b.app'];
+const DEFAULT_FRAME_ANCESTORS = [
+  'https://aistudio.google.com',
+  'https://*.usercontent.goog',
+  'https://*.e2b.app',
+  'https://*.run.app',
+  'https://vercel.live',
+];
 const allowedFrameAncestors = FRAME_ANCESTORS.length > 0 ? FRAME_ANCESTORS : DEFAULT_FRAME_ANCESTORS;
 // Only `frame-ancestors` is sent (never script/style directives) so the inline bootstrap
 // scripts in index.html keep executing.
@@ -816,18 +821,24 @@ app.use((req, res, next) => {
   });
   app.use('/api', (_req, res) => res.status(404).json({ error: 'API route not found' }));
 
-  if (!process.env.VERCEL) {
+  const isServerless = Boolean(
+    process.env.VERCEL || process.env.VERCEL_ENV || process.env.AWS_LAMBDA_FUNCTION_NAME
+  );
+
+  if (!isServerless) {
     if (process.env.NODE_ENV !== 'production') {
-      createViteServer({
-        server: { middlewareMode: true },
-        appType: 'spa',
-      }).then((vite) => {
-        app.use(vite.middlewares);
-        const PORT = Number(process.env.PORT) || 3000;
-        app.listen(PORT, '0.0.0.0', () => {
-          console.log(`Cadence Focus OS server running on http://0.0.0.0:${PORT}`);
-        });
-      });
+      void import('vite').then(({ createServer: createViteServer }) =>
+        createViteServer({
+          server: { middlewareMode: true },
+          appType: 'spa',
+        }).then((vite) => {
+          app.use(vite.middlewares);
+          const PORT = Number(process.env.PORT) || 3000;
+          app.listen(PORT, '0.0.0.0', () => {
+            console.log(`Cadence Focus OS server running on http://0.0.0.0:${PORT}`);
+          });
+        })
+      );
     } else {
       const distPath = path.join(__dirname, 'dist');
       // Vite emits content-hashed filenames under /assets, so they are safe to cache forever.

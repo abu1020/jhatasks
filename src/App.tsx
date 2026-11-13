@@ -5,6 +5,7 @@ import { ParticleBurstOverlay, ToastViewport } from './components/ui/Primitives'
 import { ErrorBoundary } from './components/ui/ErrorBoundary';
 import { InHouseAssistant } from './components/ui/InHouseAssistant';
 import { useCadenceStore } from './store/useCadenceStore';
+import { resolveAppRoute } from './lib/routing';
 import type { ViewId } from './db/schema';
 
 const MyDayView = lazy(() =>
@@ -72,36 +73,27 @@ export default function App() {
   const showLandingPage = useCadenceStore((s) => s.showLandingPage);
   const timerRunning = useCadenceStore((s) => s.focusTimer.running);
 
-  const [is404, setIs404] = React.useState(false);
+  const is404 = useCadenceStore((s) => s.routeNotFound);
 
   // Sync route on initial load and browser back/forward buttons
   useEffect(() => {
     const syncRouteFromPath = () => {
-      const path = window.location.pathname.toLowerCase().replace(/\/$/, '') || '/';
-      const VALID_ROUTES = new Set([
-        '/',
-        '/my-day',
-        '/my_day',
-        '/board',
-        '/list',
-        '/calendar',
-        '/matrix',
-        '/insights',
-        '/pricing',
-      ]);
+      const match = resolveAppRoute(window.location.pathname);
+      const st = useCadenceStore.getState();
 
-      if (!VALID_ROUTES.has(path)) {
-        setIs404(true);
+      if (!match.isValid) {
+        st.setRouteNotFound(true);
         return;
       }
 
-      setIs404(false);
-      if (path === '/board') useCadenceStore.getState().setActiveView('board');
-      else if (path === '/list') useCadenceStore.getState().setActiveView('list');
-      else if (path === '/calendar') useCadenceStore.getState().setActiveView('calendar');
-      else if (path === '/matrix') useCadenceStore.getState().setActiveView('matrix');
-      else if (path === '/insights') useCadenceStore.getState().setActiveView('insights');
-      else if (path === '/my-day' || path === '/my_day') useCadenceStore.getState().setActiveView('my_day');
+      st.setRouteNotFound(false);
+      if (match.view) {
+        st.setActiveView(match.view);
+      } else if (match.sectionHash) {
+        window.setTimeout(() => {
+          document.getElementById(match.sectionHash!)?.scrollIntoView({ behavior: 'smooth' });
+        }, 120);
+      }
     };
 
     syncRouteFromPath();
@@ -202,8 +194,10 @@ export default function App() {
           target.getAttribute('role') === 'combobox');
 
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
         const st = useCadenceStore.getState();
+        if (!st.userEmail && !st.userUid) return;
+        e.preventDefault();
+        st.setRouteNotFound(false);
         st.setShowLandingPage(false);
         st.setCommandPaletteOpen(!st.commandPaletteOpen);
         return;
@@ -247,6 +241,7 @@ export default function App() {
 
       const key = e.key.toLowerCase();
       const st = useCadenceStore.getState();
+      if (!st.userEmail && !st.userUid) return;
 
       if (key === 'n') {
         e.preventDefault();
@@ -290,7 +285,8 @@ export default function App() {
   const userUid = useCadenceStore((s) => s.userUid);
 
   // STRICT RULE: Software workspace is ONLY viewable when user is authenticated via Google
-  const canViewSoftware = Boolean(userEmail || userUid) && !showLandingPage;
+  const isAuthenticated = Boolean(userEmail || userUid);
+  const canViewSoftware = isAuthenticated && !showLandingPage;
 
   return (
     <ErrorBoundary>
@@ -327,11 +323,13 @@ export default function App() {
             </ErrorBoundary>
           )}
 
-          <Suspense fallback={null}>
-            {composerOpen && <TaskComposerModal />}
-            {(selectedTaskId || selectedEvent) && <TaskDetailDrawer />}
-            {(activeModal || commandPaletteOpen) && <EcosystemModals />}
-          </Suspense>
+          {isAuthenticated && (
+            <Suspense fallback={null}>
+              {composerOpen && <TaskComposerModal />}
+              {(selectedTaskId || selectedEvent) && <TaskDetailDrawer />}
+              {(activeModal || commandPaletteOpen) && <EcosystemModals />}
+            </Suspense>
+          )}
           <ToastViewport />
           <ParticleBurstOverlay />
           {canViewSoftware && <InHouseAssistant />}

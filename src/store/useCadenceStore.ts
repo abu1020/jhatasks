@@ -15,12 +15,21 @@ import { classifyGmailMessage, type GmailNotificationItem } from '../lib/nlpPars
 import { playCompletionChime, playTimerCompleteChime } from '../lib/soundAndParticles';
 type FirebaseModule = typeof import('../lib/firebase');
 const loadFirebase = () => import('../lib/firebase');
-const createTasksInFirestore: FirebaseModule['createTasksInFirestore'] = (...args) =>
-  loadFirebase().then((firebase) => firebase.createTasksInFirestore(...args));
-const removeTaskFromFirestore: FirebaseModule['removeTaskFromFirestore'] = (...args) =>
-  loadFirebase().then((firebase) => firebase.removeTaskFromFirestore(...args));
-const updateTaskInFirestore: FirebaseModule['updateTaskInFirestore'] = (...args) =>
-  loadFirebase().then((firebase) => firebase.updateTaskInFirestore(...args));
+const safeCreateTasksInFirestore = (tasks: Task[], uid: string, onError?: (err: unknown) => void) => {
+  void loadFirebase()
+    .then((firebase) => firebase.createTasksInFirestore(tasks, uid))
+    .catch((err) => onError?.(err));
+};
+const safeRemoveTaskFromFirestore = (id: string, uid: string, onError?: (err: unknown) => void) => {
+  void loadFirebase()
+    .then((firebase) => firebase.removeTaskFromFirestore(id, uid))
+    .catch((err) => onError?.(err));
+};
+const safeUpdateTaskInFirestore = (task: Task, uid: string, onError?: (err: unknown) => void) => {
+  void loadFirebase()
+    .then((firebase) => firebase.updateTaskInFirestore(task, uid))
+    .catch((err) => onError?.(err));
+};
 
 export type ListGroupBy = 'priority' | 'due_date' | 'status';
 export type ListSortBy = 'priority' | 'due_date' | 'title' | 'newest';
@@ -125,6 +134,7 @@ interface CadenceState {
   lastDragEndAt: number;
   activeModal: 'gmail' | 'drive' | 'shortcuts' | 'tasks_io' | null;
   showLandingPage: boolean;
+  routeNotFound: boolean;
   customizationPlan: CustomizationPlanId;
   customizationConfig: CustomizationConfig;
 
@@ -133,6 +143,7 @@ interface CadenceState {
 
   // Actions
   setShowLandingPage: (show: boolean) => void;
+  setRouteNotFound: (notFound: boolean) => void;
   updateCustomizationPlan: (
     plan: CustomizationPlanId,
     config?: Partial<CustomizationConfig>
@@ -311,6 +322,7 @@ export const useCadenceStore = create<CadenceState>()(
       lastDragEndAt: 0,
       activeModal: null,
       showLandingPage: true,
+      routeNotFound: false,
       customizationPlan: 'free',
       customizationConfig: {
         organizationName: '',
@@ -328,7 +340,8 @@ export const useCadenceStore = create<CadenceState>()(
         completedFocusSession: false,
       },
 
-      setShowLandingPage: (showLandingPage) => set({ showLandingPage }),
+      setShowLandingPage: (showLandingPage) => set({ showLandingPage, routeNotFound: false }),
+      setRouteNotFound: (routeNotFound) => set({ routeNotFound }),
 
       updateCustomizationPlan: (plan, config) =>
         set((state) => {
@@ -431,7 +444,7 @@ export const useCadenceStore = create<CadenceState>()(
           const next = order[(order.indexOf(s.workspace) + 1) % order.length];
           return { workspace: next };
         }),
-      setActiveView: (activeView) => set({ activeView, showLandingPage: false }),
+      setActiveView: (activeView) => set({ activeView, showLandingPage: false, routeNotFound: false }),
       setCalendarMode: (calendarMode) => set({ calendarMode }),
       setCalendarDate: (calendarDate) => set({ calendarDate }),
       setListGroupBy: (listGroupBy) => set({ listGroupBy }),
@@ -792,6 +805,7 @@ export const useCadenceStore = create<CadenceState>()(
           ...(options?.openDetail ? { selectedTaskId: newTask.id } : {}),
         }));
 
+        let serverSaved = false;
         try {
           const res = await apiFetch('/api/tasks', {
             method: 'POST',
@@ -799,16 +813,25 @@ export const useCadenceStore = create<CadenceState>()(
             body: JSON.stringify({ tasks: [newTask] }),
             keepalive: true,
           });
-          if (!res.ok) throw new Error('Failed to create task');
+          serverSaved = res.ok;
         } catch {
-          get().addToast({
-            message: 'Could not sync new task to server. Retrying...',
-            tone: 'warning',
-          });
+          serverSaved = false;
         }
 
         if (state.userUid) {
-          void createTasksInFirestore([newTask], state.userUid);
+          safeCreateTasksInFirestore([newTask], state.userUid, () => {
+            if (!serverSaved) {
+              get().addToast({
+                message: `Could not sync "${newTask.title}" to cloud database. Please check connection.`,
+                tone: 'warning',
+              });
+            }
+          });
+        } else if (!serverSaved) {
+          get().addToast({
+            message: 'Could not sync new task to server.',
+            tone: 'warning',
+          });
         }
         if (get().autoSyncSheets) {
           void get().syncTasksWithGoogleSheets();
@@ -826,22 +849,33 @@ export const useCadenceStore = create<CadenceState>()(
           }
           return { tasks: Array.from(byId.values()) };
         });
+        let serverSaved = false;
         try {
-          await apiFetch('/api/tasks', {
+          const res = await apiFetch('/api/tasks', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ tasks: newTasks }),
             keepalive: true,
           });
+          serverSaved = res.ok;
         } catch {
+          serverSaved = false;
+        }
+        const uid = get().userUid;
+        if (uid) {
+          safeCreateTasksInFirestore(newTasks, uid, () => {
+            if (!serverSaved) {
+              get().addToast({
+                message: 'Failed to save imported tasks to cloud database.',
+                tone: 'danger',
+              });
+            }
+          });
+        } else if (!serverSaved) {
           get().addToast({
             message: 'Failed to save imported tasks to backend.',
             tone: 'danger',
           });
-        }
-        const uid = get().userUid;
-        if (uid) {
-          void createTasksInFirestore(newTasks, uid);
         }
         if (get().autoSyncSheets) {
           void get().syncTasksWithGoogleSheets();
@@ -920,9 +954,9 @@ export const useCadenceStore = create<CadenceState>()(
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ tasks: [clone] }),
             keepalive: true,
-          });
+          }).catch(() => {});
           if (state.userUid) {
-            void createTasksInFirestore([clone], state.userUid);
+            safeCreateTasksInFirestore([clone], state.userUid);
           }
         }
 
@@ -941,16 +975,22 @@ export const useCadenceStore = create<CadenceState>()(
           if (!toFlush) return;
 
           const ok = await sendPatchWithRetry(id, toFlush);
-          if (!ok) {
+          const uid = get().userUid;
+          const latestTask = get().tasks.find((t) => t.id === id);
+          if (uid && latestTask) {
+            safeUpdateTaskInFirestore(latestTask, uid, () => {
+              if (!ok) {
+                get().addToast({
+                  message: `Failed to save changes to "${updatedTask.title}"`,
+                  tone: 'danger',
+                });
+              }
+            });
+          } else if (!ok) {
             get().addToast({
               message: `Failed to save changes to "${updatedTask.title}"`,
               tone: 'danger',
             });
-          }
-          const uid = get().userUid;
-          const latestTask = get().tasks.find((t) => t.id === id);
-          if (uid && latestTask) {
-            void updateTaskInFirestore(latestTask, uid);
           }
           if (get().autoSyncSheets) {
             void get().syncTasksWithGoogleSheets();
@@ -990,7 +1030,7 @@ export const useCadenceStore = create<CadenceState>()(
           }
           const uid = get().userUid;
           if (uid) {
-            void removeTaskFromFirestore(id, uid);
+            safeRemoveTaskFromFirestore(id, uid);
           }
           if (get().autoSyncSheets) {
             void get().syncTasksWithGoogleSheets();

@@ -24,6 +24,8 @@ type FirebaseModule = typeof import('../../lib/firebase');
 const loadFirebase = () => import('../../lib/firebase');
 const googleSignIn: FirebaseModule['googleSignIn'] = (...args) =>
   loadFirebase().then((firebase) => firebase.googleSignIn(...args));
+const googleSignInRedirect: FirebaseModule['googleSignInRedirect'] = (...args) =>
+  loadFirebase().then((firebase) => firebase.googleSignInRedirect(...args));
 const logout: FirebaseModule['logout'] = (...args) =>
   loadFirebase().then((firebase) => firebase.logout(...args));
 import { BrandLockup } from '../ui/Brand';
@@ -149,13 +151,16 @@ export function LandingWebsite() {
   const createTask = useCadenceStore((s) => s.createTask);
 
   // Auth state
+  const userUid = useCadenceStore((s) => s.userUid);
   const userEmail = useCadenceStore((s) => s.userEmail);
   const userName = useCadenceStore((s) => s.userName);
   const userPhoto = useCadenceStore((s) => s.userPhoto);
   const setAuthUser = useCadenceStore((s) => s.setAuthUser);
+  const isAuthenticated = Boolean(userEmail || userUid);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authCanRedirectFallback, setAuthCanRedirectFallback] = useState(false);
 
   // Interactive Hero Preview state
   const [heroTab, setHeroTab] = useState<'my_day' | 'google_sync' | 'gmail_otp'>('my_day');
@@ -192,9 +197,10 @@ export function LandingWebsite() {
     [liveNlpSample]
   );
 
-  const handleGoogleAuth = async () => {
+  const handleGoogleAuth = async (afterSignIn?: () => void) => {
     setAuthBusy(true);
     setAuthError(null);
+    setAuthCanRedirectFallback(false);
     try {
       const res = await googleSignIn();
       setAuthUser({
@@ -209,14 +215,23 @@ export function LandingWebsite() {
         tone: 'success',
       });
       setAuthModalOpen(false);
-      setShowLandingPage(false);
-      setActiveView('my_day');
+      if (afterSignIn) {
+        afterSignIn();
+      } else {
+        setShowLandingPage(false);
+        setActiveView('my_day');
+      }
     } catch (err: any) {
-      setAuthError(
-        err?.isPopupBlocked
-          ? 'Browser blocked the Google sign-in popup. Please allow popups to complete authentication.'
-          : err?.message || 'Google sign-in could not be completed.'
-      );
+      const message = err?.isPopupBlocked
+        ? 'Browser blocked the Google sign-in popup. Allow popups for this site or continue via Redirect Sign-In below.'
+        : err?.message || 'Google sign-in could not be completed.';
+      setAuthCanRedirectFallback(Boolean(err?.isPopupBlocked));
+      setAuthError(message);
+      setAuthModalOpen(true);
+      addToast({
+        message,
+        tone: 'warning',
+      });
     } finally {
       setAuthBusy(false);
     }
@@ -224,8 +239,11 @@ export function LandingWebsite() {
 
   const handleLaunchWorkspace = useCallback(
     (targetView?: ViewId) => {
-      if (!userEmail) {
-        void handleGoogleAuth();
+      if (!isAuthenticated) {
+        void handleGoogleAuth(() => {
+          if (targetView) setActiveView(targetView);
+          setShowLandingPage(false);
+        });
         return;
       }
       if (targetView) {
@@ -233,11 +251,27 @@ export function LandingWebsite() {
       }
       setShowLandingPage(false);
     },
-    [userEmail, setActiveView, setShowLandingPage]
+    [isAuthenticated, setActiveView, setShowLandingPage]
+  );
+
+  const handleOpenAuthedModal = useCallback(
+    (modal: 'gmail' | 'tasks_io') => {
+      if (!isAuthenticated) {
+        void handleGoogleAuth(() => {
+          setShowLandingPage(false);
+          setActiveView('my_day');
+          setActiveModal(modal);
+        });
+        return;
+      }
+      setShowLandingPage(false);
+      setActiveModal(modal);
+    },
+    [isAuthenticated, setShowLandingPage, setActiveView, setActiveModal]
   );
 
   const handleStartForFree = useCallback(() => {
-    if (!userEmail) {
+    if (!isAuthenticated) {
       void handleGoogleAuth();
       return;
     }
@@ -247,10 +281,10 @@ export function LandingWebsite() {
       tone: 'success',
     });
     setShowLandingPage(false);
-  }, [userEmail, updateCustomizationPlan, addToast, setShowLandingPage]);
+  }, [isAuthenticated, updateCustomizationPlan, addToast, setShowLandingPage]);
 
   const handleCreateNlpTaskAndLaunch = useCallback(async () => {
-    if (!userEmail) {
+    if (!isAuthenticated) {
       void handleGoogleAuth();
       return;
     }
@@ -282,11 +316,11 @@ export function LandingWebsite() {
       setShowLandingPage(false);
       openComposer({ initialTitle: liveNlpSample });
     }
-  }, [userEmail, liveNlpSample, createTask, workspace, addToast, setShowLandingPage, setActiveView, openComposer, handleLaunchWorkspace]);
+  }, [isAuthenticated, liveNlpSample, createTask, workspace, addToast, setShowLandingPage, setActiveView, openComposer, handleLaunchWorkspace]);
 
   const handleSelectTier = useCallback(
     (tierId: CustomizationPlanId) => {
-      if (!userEmail) {
+      if (!isAuthenticated) {
         void handleGoogleAuth();
         return;
       }
@@ -300,7 +334,7 @@ export function LandingWebsite() {
         el.scrollIntoView({ behavior: 'smooth' });
       }
     },
-    [userEmail, handleStartForFree]
+    [isAuthenticated, handleStartForFree]
   );
 
   const handleSignOut = async () => {
@@ -350,7 +384,7 @@ export function LandingWebsite() {
     <div className="min-h-dvh bg-[var(--bg)] text-[var(--text-1)] relative z-10">
       {/* 1. COMPACT 3-ZONE TOP BAR WITH AUTH & CTAS */}
       <header className="sticky top-0 z-40 glass border-b border-[var(--border)]">
-        <div className="max-w-[1280px] mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-6">
+        <div className="max-w-[1280px] mx-auto px-3 sm:px-6 h-14 flex items-center justify-between gap-2 sm:gap-6">
           {/* Zone 1: Single text element Brand Wordmark */}
           <a
             href="#top"
@@ -361,7 +395,7 @@ export function LandingWebsite() {
             aria-label="Cadence home"
             className="whitespace-nowrap shrink-0 rounded-xl transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
           >
-            <BrandLockup />
+            <BrandLockup compact />
           </a>
 
           {/* Zone 2: 4 concise navigation links */}
@@ -396,9 +430,9 @@ export function LandingWebsite() {
           </nav>
 
           {/* Zone 3: Account & Primary CTA actions */}
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             {userEmail ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <button
                   type="button"
                   onClick={() => handleLaunchWorkspace('my_day')}
@@ -432,10 +466,12 @@ export function LandingWebsite() {
               <button
                 type="button"
                 onClick={() => void handleGoogleAuth()}
-                className="btn-ghost px-3 py-1.5 rounded-lg text-xs font-semibold text-[var(--text-2)] hover:text-[var(--text-1)] inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
+                aria-label="Sign in with Google"
+                className="btn-ghost px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold text-[var(--text-2)] hover:text-[var(--text-1)] inline-flex items-center gap-1 sm:gap-1.5 whitespace-nowrap shrink-0 cursor-pointer"
               >
-                <LogIn className="w-3.5 h-3.5" />
-                <span>Sign In with Google</span>
+                <LogIn className="w-3.5 h-3.5 shrink-0" />
+                <span className="sm:hidden">Sign In</span>
+                <span className="hidden sm:inline">Sign In with Google</span>
               </button>
             )}
 
@@ -443,19 +479,21 @@ export function LandingWebsite() {
               <button
                 type="button"
                 onClick={() => handleLaunchWorkspace('my_day')}
-                className="btn-accent px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 shadow-sm"
+                className="btn-accent px-2.5 sm:px-3.5 py-1.5 rounded-xl text-[11px] sm:text-sm font-semibold whitespace-nowrap shrink-0 inline-flex items-center gap-1 sm:gap-1.5 shadow-sm"
               >
-                <span>Open Workspace</span>
-                <ArrowRight className="w-3.5 h-3.5" />
+                <span className="sm:hidden">Workspace</span>
+                <span className="hidden sm:inline">Open Workspace</span>
+                <ArrowRight className="w-3.5 h-3.5 shrink-0" />
               </button>
             ) : (
               <button
                 type="button"
                 onClick={handleStartForFree}
-                className="btn-accent px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap shrink-0 inline-flex items-center gap-1.5 shadow-sm cursor-pointer"
+                className="btn-accent px-2.5 sm:px-3.5 py-1.5 rounded-xl text-[11px] sm:text-sm font-semibold whitespace-nowrap shrink-0 inline-flex items-center gap-1 sm:gap-1.5 shadow-sm cursor-pointer"
               >
-                <span>Start for Free</span>
-                <ArrowRight className="w-3.5 h-3.5" />
+                <span className="sm:hidden">Start Free</span>
+                <span className="hidden sm:inline">Start for Free</span>
+                <ArrowRight className="w-3.5 h-3.5 shrink-0" />
               </button>
             )}
           </div>
@@ -507,8 +545,17 @@ export function LandingWebsite() {
               </button>
 
               {authError && (
-                <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-[11px] text-red-600 dark:text-red-300">
-                  {authError}
+                <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 text-[11px] text-red-600 dark:text-red-300 space-y-2">
+                  <div>{authError}</div>
+                  {authCanRedirectFallback && (
+                    <button
+                      type="button"
+                      onClick={() => void googleSignInRedirect()}
+                      className="w-full py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition cursor-pointer"
+                    >
+                      Continue with Google Redirect Sign-In
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -791,10 +838,7 @@ export function LandingWebsite() {
                     <div className="pt-1 flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => {
-                          setShowLandingPage(false);
-                          setActiveModal('tasks_io');
-                        }}
+                        onClick={() => handleOpenAuthedModal('tasks_io')}
                         className="btn-accent px-2.5 py-1 rounded-md text-[11px] font-semibold inline-flex items-center gap-1"
                       >
                         <FileJson className="w-3 h-3" />
@@ -821,10 +865,7 @@ export function LandingWebsite() {
                     <div className="pt-1 flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => {
-                          setShowLandingPage(false);
-                          setActiveModal('gmail');
-                        }}
+                        onClick={() => handleOpenAuthedModal('gmail')}
                         className="btn-ghost px-2.5 py-1 rounded-md text-[11px] font-semibold inline-flex items-center gap-1"
                       >
                         <Mail className="w-3 h-3" />
@@ -952,10 +993,7 @@ export function LandingWebsite() {
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  setShowLandingPage(false);
-                  setActiveModal('tasks_io');
-                }}
+                onClick={() => handleOpenAuthedModal('tasks_io')}
                 className="btn-ghost px-2.5 py-1.5 rounded-lg text-xs font-semibold text-[var(--accent)] text-left w-full inline-flex items-center gap-1.5"
               >
                 <FileJson className="w-3.5 h-3.5" />
@@ -974,10 +1012,7 @@ export function LandingWebsite() {
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  setShowLandingPage(false);
-                  setActiveModal('tasks_io');
-                }}
+                onClick={() => handleOpenAuthedModal('tasks_io')}
                 className="btn-ghost px-2.5 py-1.5 rounded-lg text-xs font-semibold text-[var(--accent)] text-left w-full inline-flex items-center gap-1.5"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5" />
@@ -996,10 +1031,7 @@ export function LandingWebsite() {
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  setShowLandingPage(false);
-                  setActiveModal('gmail');
-                }}
+                onClick={() => handleOpenAuthedModal('gmail')}
                 className="btn-ghost px-2.5 py-1.5 rounded-lg text-xs font-semibold text-[var(--accent)] text-left w-full inline-flex items-center gap-1.5"
               >
                 <Mail className="w-3.5 h-3.5" />

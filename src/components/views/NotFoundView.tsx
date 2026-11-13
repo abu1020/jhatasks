@@ -19,6 +19,7 @@ import type { ViewId } from '../../db/schema';
 export function NotFoundView() {
   const setActiveView = useCadenceStore((s) => s.setActiveView);
   const setShowLandingPage = useCadenceStore((s) => s.setShowLandingPage);
+  const setRouteNotFound = useCadenceStore((s) => s.setRouteNotFound);
   const setCommandPaletteOpen = useCadenceStore((s) => s.setCommandPaletteOpen);
   const userEmail = useCadenceStore((s) => s.userEmail);
   const userUid = useCadenceStore((s) => s.userUid);
@@ -29,6 +30,7 @@ export function NotFoundView() {
     if (typeof window !== 'undefined') {
       window.history.pushState({}, '', '/');
     }
+    setRouteNotFound(false);
     if (isAuthenticated) {
       setShowLandingPage(false);
       setActiveView('my_day');
@@ -38,9 +40,14 @@ export function NotFoundView() {
   };
 
   const handleNavigateToView = (view: ViewId) => {
+    if (!isAuthenticated) {
+      handleReturnHome();
+      return;
+    }
     if (typeof window !== 'undefined') {
       window.history.pushState({}, '', `/${view.replace('_', '-')}`);
     }
+    setRouteNotFound(false);
     setShowLandingPage(false);
     setActiveView(view);
   };
@@ -97,18 +104,20 @@ export function NotFoundView() {
             <span>{isAuthenticated ? 'Return to Workspace' : 'Go to Homepage'}</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setCommandPaletteOpen(true)}
-            className="px-5 py-3 rounded-2xl text-xs sm:text-sm font-semibold bg-[var(--surface-2)] hover:bg-[var(--surface-3)] text-[var(--text-1)] border border-[var(--border-strong)] inline-flex items-center gap-2 transition cursor-pointer"
-          >
-            <Search className="w-4 h-4 text-[var(--accent)]" />
-            <span>Search or Quick Command</span>
-            <span className="kbd hidden sm:inline-flex items-center gap-0.5 ml-1 text-[10px]">
-              <Command className="w-2.5 h-2.5" />
-              <span>K</span>
-            </span>
-          </button>
+          {isAuthenticated && (
+            <button
+              type="button"
+              onClick={() => setCommandPaletteOpen(true)}
+              className="px-5 py-3 rounded-2xl text-xs sm:text-sm font-semibold bg-[var(--surface-2)] hover:bg-[var(--surface-3)] text-[var(--text-1)] border border-[var(--border-strong)] inline-flex items-center gap-2 transition cursor-pointer"
+            >
+              <Search className="w-4 h-4 text-[var(--accent)]" />
+              <span>Search or Quick Command</span>
+              <span className="kbd hidden sm:inline-flex items-center gap-0.5 ml-1 text-[10px]">
+                <Command className="w-2.5 h-2.5" />
+                <span>K</span>
+              </span>
+            </button>
+          )}
         </div>
 
         {/* Quick View Jumps (if authenticated) */}

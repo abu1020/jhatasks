@@ -3,6 +3,8 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   onAuthStateChanged,
   type User,
 } from 'firebase/auth';
@@ -13,6 +15,7 @@ import {
   collection,
   getDocs,
   setDoc,
+  updateDoc,
   deleteDoc,
   serverTimestamp,
   writeBatch,
@@ -117,10 +120,27 @@ export function handleFirestoreError(
 // In-memory OAuth access token cache (never stored in localStorage/sessionStorage)
 let isSigningIn = false;
 let cachedAccessToken: string | null = null;
+let redirectChecked = false;
 
 export const initAuth = (
   onAuthChange: (user: User | null, accessToken: string | null) => void
 ) => {
+  if (!redirectChecked && typeof window !== 'undefined') {
+    redirectChecked = true;
+    void getRedirectResult(auth)
+      .then((result) => {
+        if (!result) return;
+        const credential = GoogleAuthProvider.credentialFromResult(result);
+        if (credential?.accessToken) {
+          cachedAccessToken = credential.accessToken;
+        }
+        onAuthChange(result.user, cachedAccessToken);
+      })
+      .catch(() => {
+        // Ignore stale redirect errors on normal loads
+      });
+  }
+
   return onAuthStateChanged(auth, (user: User | null) => {
     if (user) {
       onAuthChange(user, cachedAccessToken);
@@ -162,6 +182,7 @@ export const googleSignIn = async (): Promise<SignInResult> => {
   } catch (err: any) {
     const code = err?.code || '';
     const message = err?.message || String(err);
+    const hostname = typeof window !== 'undefined' ? window.location.hostname : 'this domain';
     const isUnauthorizedDomain =
       code === 'auth/unauthorized-domain' ||
       message.includes('unauthorized-domain') ||
@@ -173,9 +194,9 @@ export const googleSignIn = async (): Promise<SignInResult> => {
 
     const enhancedErr: any = new Error(
       isUnauthorizedDomain
-        ? 'Preview domain is not authorized for Google OAuth. Add it to Firebase authorized domains to sign in.'
+        ? `Domain "${hostname}" is not authorized in Firebase OAuth. Add "${hostname}" under Firebase Console -> Authentication -> Settings -> Authorized domains to sign in.`
         : isPopupBlocked
-        ? 'Browser blocked the Google sign-in popup. Enable popups to authenticate.'
+        ? 'Browser blocked the Google sign-in popup. Enable popups or use Redirect Sign-In below.'
         : message.includes('closed')
         ? 'Google sign-in popup was closed before completion.'
         : `Google sign-in error: ${message}`
@@ -187,6 +208,10 @@ export const googleSignIn = async (): Promise<SignInResult> => {
   } finally {
     isSigningIn = false;
   }
+};
+
+export const googleSignInRedirect = async (): Promise<void> => {
+  await signInWithRedirect(auth, provider);
 };
 
 export const getAccessToken = (): string | null => cachedAccessToken;
@@ -309,19 +334,23 @@ export async function fetchFirestoreUserTasksAndEvents(
 }
 
 export async function createTasksInFirestore(tasksToCreate: Task[], uid: string) {
-  if (!auth.currentUser || auth.currentUser.uid !== uid) return;
-  const batch = writeBatch(db);
-  for (const t of tasksToCreate) {
-    const clean = sanitizeTaskForFirestore(t, uid);
-    const ref = doc(db, `users/${uid}/tasks/${clean.id}`);
-    batch.set(ref, {
-      ...clean,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-  }
+  if (!auth.currentUser || auth.currentUser.uid !== uid || tasksToCreate.length === 0) return;
+  const CHUNK_SIZE = 400;
   try {
-    await batch.commit();
+    for (let i = 0; i < tasksToCreate.length; i += CHUNK_SIZE) {
+      const slice = tasksToCreate.slice(i, i + CHUNK_SIZE);
+      const batch = writeBatch(db);
+      for (const t of slice) {
+        const clean = sanitizeTaskForFirestore(t, uid);
+        const ref = doc(db, `users/${uid}/tasks/${clean.id}`);
+        batch.set(ref, {
+          ...clean,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+      await batch.commit();
+    }
   } catch (err) {
     handleFirestoreError(err, OperationType.CREATE, `users/${uid}/tasks`);
   }
@@ -331,16 +360,27 @@ export async function updateTaskInFirestore(task: Task, uid: string) {
   if (!auth.currentUser || auth.currentUser.uid !== uid) return;
   const clean = sanitizeTaskForFirestore(task, uid);
   const path = `users/${uid}/tasks/${clean.id}`;
+  const ref = doc(db, path);
+  const { id: _id, ownerId: _ownerId, created_at: _createdAtStr, ...mutableFields } = clean;
   try {
-    await setDoc(
-      doc(db, path),
-      {
-        ...clean,
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true }
-    );
-  } catch (err) {
+    await updateDoc(ref, {
+      ...mutableFields,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (err: any) {
+    const code = err?.code || '';
+    if (code === 'not-found' || String(err?.message || '').includes('No document to update')) {
+      try {
+        await setDoc(ref, {
+          ...clean,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        return;
+      } catch (createErr) {
+        handleFirestoreError(createErr, OperationType.CREATE, path);
+      }
+    }
     handleFirestoreError(err, OperationType.UPDATE, path);
   }
 }
@@ -372,6 +412,10 @@ export async function fetchGoogleCalendarLiveEvents(): Promise<CalendarEvent[]> 
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
+  if (res.status === 401 || res.status === 403) {
+    cachedAccessToken = null;
+    throw new Error('NEEDS_GOOGLE_AUTH');
+  }
   if (!res.ok) {
     throw new Error(`Calendar API returned ${res.status}`);
   }
@@ -574,6 +618,10 @@ export async function fetchGoogleDriveRecentFiles(): Promise<Attachment[]> {
       headers: { Authorization: `Bearer ${token}` },
     }
   );
+  if (res.status === 401 || res.status === 403) {
+    cachedAccessToken = null;
+    throw new Error('NEEDS_GOOGLE_AUTH');
+  }
   if (!res.ok) {
     throw new Error(`Drive API returned ${res.status}`);
   }
@@ -615,6 +663,10 @@ export async function fetchGoogleTaskListsLive(): Promise<GoogleTaskListMeta[]> 
   const res = await fetch('https://tasks.googleapis.com/tasks/v1/users/@me/lists?maxResults=20', {
     headers: { Authorization: `Bearer ${token}` },
   });
+  if (res.status === 401 || res.status === 403) {
+    cachedAccessToken = null;
+    throw new Error('NEEDS_GOOGLE_AUTH');
+  }
   if (!res.ok) {
     throw new Error(`Google Tasks Lists API returned ${res.status}`);
   }
@@ -642,6 +694,10 @@ export async function fetchGoogleTasksLive(
       headers: { Authorization: `Bearer ${token}` },
     }
   );
+  if (res.status === 401 || res.status === 403) {
+    cachedAccessToken = null;
+    throw new Error('NEEDS_GOOGLE_AUTH');
+  }
   if (!res.ok) {
     throw new Error(`Google Tasks API returned ${res.status}`);
   }
