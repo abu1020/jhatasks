@@ -19,7 +19,12 @@ export default defineConfig(() => {
       allowedHosts: ['.e2b.app', 'all'],
       // Disable HMR WebSocket to prevent disconnection rejections in proxied preview iframe.
       hmr: false,
-      watch: null,
+      // Keep the watcher enabled (unlike `watch: null`) so edited files are re-transformed on
+      // reload. HMR is off, so this only affects the transform cache, not live updates.
+      // Ignoring build output and dependencies keeps watcher inode usage low in sandboxes.
+      watch: {
+        ignored: ['**/node_modules/**', '**/dist/**', '**/.git/**'],
+      },
     },
   };
 });

@@ -149,9 +149,9 @@ export function EcosystemSyncToolbar() {
         <div className="w-8 h-8 rounded-xl bg-[var(--accent-soft)] text-[var(--accent)] flex items-center justify-center shrink-0">
           <Sparkles className="w-4 h-4" />
         </div>
-        <div>
-          <div className="flex items-center gap-2">
-            <h4 className="text-xs font-bold text-[var(--text-1)] whitespace-nowrap">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <h4 className="text-xs font-bold text-[var(--text-1)] truncate">
               Google Ecosystem Live Sync
             </h4>
             {hasGoogleToken && (
@@ -167,7 +167,7 @@ export function EcosystemSyncToolbar() {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 shrink-0">
+      <div className="flex flex-wrap items-center gap-2 min-w-0">
         {/* Fetch Google Tasks Button */}
         <button
           type="button"
@@ -205,7 +205,7 @@ export function EcosystemSyncToolbar() {
           type="button"
           onClick={() => setActiveModal('tasks_io')}
           title="Open Google Tasks & Sheets Hub"
-          className="p-2 rounded-xl text-[var(--text-3)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] transition border border-[var(--border)]"
+          className="p-2 rounded-xl text-[var(--text-3)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] transition border border-[var(--border)] min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 inline-flex items-center justify-center"
         >
           <FileSpreadsheet className="w-4 h-4 text-[#059669]" />
         </button>

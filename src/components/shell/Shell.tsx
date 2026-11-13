@@ -772,7 +772,7 @@ export function ImportGoogleTasksPicker({
             onClick={() => setTargetWorkspace('office')}
             className={`px-1.5 py-0.5 rounded-md font-semibold transition ${
               targetWorkspace === 'office'
-                ? 'bg-[var(--accent)] text-white'
+                ? 'bg-[var(--accent)] text-white dark:text-[var(--bg)]'
                 : 'text-[var(--text-3)] hover:text-[var(--text-1)]'
             }`}
           >
@@ -783,7 +783,7 @@ export function ImportGoogleTasksPicker({
             onClick={() => setTargetWorkspace('personal')}
             className={`px-1.5 py-0.5 rounded-md font-semibold transition ${
               targetWorkspace === 'personal'
-                ? 'bg-[var(--accent)] text-white'
+                ? 'bg-[var(--accent)] text-white dark:text-[var(--bg)]'
                 : 'text-[var(--text-3)] hover:text-[var(--text-1)]'
             }`}
           >
@@ -1481,7 +1481,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     type="button"
                     onClick={() => setNavOpen(false)}
                     aria-label="Close navigation panel"
-                    className="btn-ghost p-1.5 rounded-lg text-xs"
+                    className="btn-ghost p-1.5 rounded-lg text-xs min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-0 inline-flex items-center justify-center"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
@@ -1585,7 +1585,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             type="button"
             onClick={toggleNav}
             aria-label="Open navigation menu"
-            className="lg:hidden btn-ghost w-9 h-9 sm:w-10 sm:h-10 rounded-xl inline-flex items-center justify-center shrink-0"
+            className="lg:hidden btn-ghost w-10 h-10 sm:w-10 sm:h-10 rounded-xl inline-flex items-center justify-center min-w-[40px] min-h-[40px] shrink-0"
           >
             <Menu className="w-4 h-4" />
           </button>
@@ -1627,7 +1627,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           type="button"
           onClick={() => setCommandPaletteOpen(true)}
           aria-label="Open command palette and search"
-          className="btn-ghost px-2 sm:px-3.5 py-1.5 rounded-xl text-xs text-[var(--text-3)] inline-flex items-center justify-between gap-2 sm:gap-3 sm:max-w-[260px] sm:flex-1 min-h-[36px] sm:min-h-[38px] shrink-0"
+          className="btn-ghost px-2 sm:px-3.5 py-1.5 rounded-xl text-xs text-[var(--text-3)] min-w-[40px] sm:min-w-0 inline-flex items-center justify-between gap-2 sm:gap-3 sm:max-w-[260px] sm:flex-1 min-h-[40px] sm:min-h-[38px] shrink-0"
         >
           <span className="inline-flex items-center gap-2 truncate">
             <Search className="w-3.5 h-3.5 shrink-0" />
@@ -1649,7 +1649,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             Website & Pricing
           </button>
 
-          <FocusTimerBanner />
+          <div className="hidden sm:contents">
+            <FocusTimerBanner />
+          </div>
 
           {/* Today progress ring (uses exact shared formula) */}
           <button
@@ -1657,7 +1659,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             onClick={() => setActiveView('my_day')}
             title={`Today's progress: ${todayStats.completedTodayCount}/${todayStats.totalCount} (${todayStats.percentage}%)`}
             aria-label={`Today's progress ${todayStats.percentage}%`}
-            className="hidden xs:inline-flex sm:inline-flex items-center gap-1.5 px-1.5 py-1 rounded-xl hover:bg-[var(--surface-3)] transition"
+            className="hidden sm:inline-flex items-center gap-1.5 px-1.5 py-1 rounded-xl hover:bg-[var(--surface-3)] transition"
           >
             <ProgressRing percentage={todayStats.percentage} size={26} strokeWidth={3} />
             <span className="hidden md:inline text-xs font-semibold text-[var(--text-2)] tnum">
@@ -1672,7 +1674,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               onClick={() => setActiveModal('tasks_io')}
               title="Fetch Google Tasks & Sheets"
               aria-label="Fetch Google Tasks and Sheets Hub"
-              className="p-1.5 sm:p-2 rounded-lg text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] min-w-[34px] min-h-[34px] sm:min-w-[36px] sm:min-h-[36px] inline-flex items-center justify-center transition"
+              className="p-1.5 sm:p-2 rounded-lg text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] min-w-[40px] min-h-[40px] sm:min-w-[36px] sm:min-h-[36px] inline-flex items-center justify-center transition"
             >
               <CheckSquare className="w-4 h-4 text-[#10B981]" />
             </button>
@@ -1681,7 +1683,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               onClick={() => setActiveModal('gmail')}
               title="Fetch Gmail Inbox & Messages"
               aria-label="Fetch Gmail Inbox and Messages"
-              className="p-1.5 sm:p-2 rounded-lg text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] min-w-[34px] min-h-[34px] sm:min-w-[36px] sm:min-h-[36px] inline-flex items-center justify-center transition"
+              className="p-1.5 sm:p-2 rounded-lg text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] min-w-[40px] min-h-[40px] sm:min-w-[36px] sm:min-h-[36px] inline-flex items-center justify-center transition"
             >
               <Mail className="w-4 h-4 text-[#EA4335]" />
             </button>
@@ -1692,7 +1694,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               aria-label="Open Gmail and OTP notifications"
               aria-expanded={notificationsOpen}
               title="Gmail & OTP Notifications"
-              className="relative p-1.5 sm:p-2 rounded-lg text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] min-w-[34px] min-h-[34px] sm:min-w-[36px] sm:min-h-[36px] inline-flex items-center justify-center transition"
+              className="relative p-1.5 sm:p-2 rounded-lg text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] min-w-[40px] min-h-[40px] sm:min-w-[36px] sm:min-h-[36px] inline-flex items-center justify-center transition"
             >
               <Bell className="w-4 h-4" />
               {unreadNotifCount > 0 && (
@@ -1710,7 +1712,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               onClick={toggleTheme}
               aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
               title="Toggle theme (D)"
-              className="p-1.5 sm:p-2 rounded-lg text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] min-w-[34px] min-h-[34px] sm:min-w-[36px] sm:min-h-[36px] inline-flex items-center justify-center transition"
+              className="p-1.5 sm:p-2 rounded-lg text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] min-w-[40px] min-h-[40px] sm:min-w-[36px] sm:min-h-[36px] inline-flex items-center justify-center transition"
             >
               {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
@@ -1721,7 +1723,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               aria-label="Open Google Workspace and settings menu"
               aria-expanded={settingsOpen}
               title="Google Workspace & Settings"
-              className="p-1.5 sm:p-2 rounded-lg text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] min-w-[34px] min-h-[34px] sm:min-w-[36px] sm:min-h-[36px] inline-flex items-center justify-center transition"
+              className="p-1.5 sm:p-2 rounded-lg text-[var(--text-2)] hover:text-[var(--text-1)] hover:bg-[var(--surface-3)] min-w-[40px] min-h-[40px] sm:min-w-[36px] sm:min-h-[36px] inline-flex items-center justify-center transition"
             >
               <Settings className="w-4 h-4" />
             </button>
@@ -1732,7 +1734,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             type="button"
             onClick={() => openComposer()}
             aria-label="New task"
-            className="btn-accent px-2.5 sm:px-3.5 py-2 rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 min-h-[36px] sm:min-h-[38px] whitespace-nowrap shrink-0"
+            className="btn-accent px-2.5 sm:px-3.5 py-2 rounded-xl text-xs font-semibold inline-flex min-w-[40px] sm:min-w-0 items-center gap-1.5 min-h-[40px] sm:min-h-[38px] whitespace-nowrap shrink-0"
           >
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">New task</span>

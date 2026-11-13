@@ -290,7 +290,7 @@ export function SegmentedControl<T extends string>({
             type="button"
             onClick={() => onChange(opt.value)}
             className={`inline-flex items-center gap-1.5 rounded-lg font-medium whitespace-nowrap shrink-0 transition-all ${
-              size === 'sm' ? 'px-2.5 py-1 text-xs min-h-[30px]' : 'px-3 py-1.5 text-xs min-h-[34px]'
+              size === 'sm' ? 'px-2.5 py-1 text-xs min-w-[40px] min-h-[40px] sm:min-w-0 sm:min-h-[30px]' : 'px-3 py-1.5 text-xs min-w-[40px] min-h-[44px] sm:min-w-0 sm:min-h-[34px]'
             } ${
               active
                 ? 'bg-[var(--surface-2)] text-[var(--text-1)] shadow-xs border border-[var(--border)]'
@@ -711,7 +711,7 @@ export function ToastViewport() {
                         t.onAction?.();
                         dismissToast(t.id);
                       }}
-                      className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-[var(--accent)] text-white hover:brightness-110 tnum"
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-[var(--accent)] text-white dark:text-[var(--bg)] hover:brightness-110 tnum"
                     >
                       {t.actionLabel}
                     </button>
@@ -731,7 +731,7 @@ export function ToastViewport() {
                         t.onAction?.();
                         dismissToast(t.id);
                       }}
-                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[var(--accent)] text-white hover:brightness-110"
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[var(--accent)] text-white dark:text-[var(--bg)] hover:brightness-110"
                     >
                       {t.actionLabel}
                     </button>

@@ -18,8 +18,9 @@
   --border-strong: rgba(15, 23, 42, 0.17);
   --text-1: #0F172A;
   --text-2: #334155;
-  --text-3: #64748B;
-  --text-4: #64748B;
+  /* Slightly darker than slate-500 so muted text clears WCAG AA on tinted surfaces. */
+  --text-3: #5A6B84;
+  --text-4: #5A6B84;
   --overlay: rgba(15, 23, 42, 0.42);
 
   /* Default Unified / All workspace accent */
@@ -125,9 +126,41 @@
     overflow-x: hidden;
   }
 
+  html {
+    scroll-behavior: smooth;
+    /* Keep anchored sections clear of the sticky header. */
+    scroll-padding-top: 5rem;
+  }
+
+  body {
+    /* Stop the whole page rubber-banding; scroll containers opt back in. */
+    overscroll-behavior-y: none;
+    /* Fluid type: scales gently between mobile and desktop without extra breakpoints. */
+    font-size: clamp(14px, 0.9rem + 0.1vw, 15px);
+  }
+
+  /* Remove the grey flash on tap so touch interactions feel instant. */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
   :focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
+  }
+
+  /* Balanced headings read better on every width and avoid awkward orphans. */
+  h1,
+  h2,
+  h3,
+  h4,
+  .font-display {
+    text-wrap: balance;
+  }
+
+  p,
+  li {
+    text-wrap: pretty;
   }
 
   ::selection {
@@ -159,144 +192,314 @@
   }
 }
 
-.tnum {
-  font-variant-numeric: tabular-nums;
-}
-
-.glass {
-  background: var(--glass);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-
-.card {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: var(--shadow-card);
-}
-
-.popover-surface {
-  background-color: var(--popover);
-  border: 1px solid var(--popover-border);
-  box-shadow: var(--shadow-pop);
-}
-
-.btn-accent {
-  background: linear-gradient(135deg, var(--accent-strong), var(--accent-2));
-  color: #FFFFFF;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 4px 14px -2px var(--accent-glow);
-  transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1), filter 140ms ease;
-}
-.btn-accent:hover {
-  filter: brightness(1.06);
-}
-.btn-accent:active {
-  transform: scale(0.965);
-}
-.btn-accent:disabled {
-  cursor: not-allowed;
-  filter: saturate(0.55);
-  box-shadow: none;
-}
-
-.btn-ghost {
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  color: var(--text-2);
-  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
-}
-.btn-ghost:hover {
-  border-color: var(--border-strong);
-  background: var(--surface-3);
-  color: var(--text-1);
-}
-
-.input-base {
-  background: var(--surface-1);
-  border: 1px solid var(--border);
-  color: var(--text-1);
-  transition: border-color 140ms ease, box-shadow 140ms ease;
-}
-.input-base::placeholder {
-  color: var(--text-4);
-}
-.input-base:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
-
-:where(button, a, [role='button'], input, select, textarea):focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.kbd {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1px 6px;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.4;
-  border-radius: 5px;
-  background: var(--surface-3);
-  border: 1px solid var(--border-strong);
-  color: var(--text-3);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
-
-.ambient-glow {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  contain: strict;
-  opacity: var(--ambient-opacity);
-  background:
-    radial-gradient(circle at 14% 12%, var(--accent-glow), transparent 44%),
-    radial-gradient(circle at 86% 82%, var(--accent-glow), transparent 46%);
-}
-
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
+@layer components {
+  .tnum {
+    font-variant-numeric: tabular-nums;
   }
-  100% {
-    background-position: 200% 0;
-  }
-}
 
-.skeleton {
-  background: linear-gradient(
-    90deg,
-    var(--surface-1) 25%,
-    var(--surface-3) 50%,
-    var(--surface-1) 75%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.6s infinite linear;
-  border-radius: 10px;
-}
+  .glass {
+    background: var(--glass);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
 
-@keyframes shake {
-  0%,
-  100% {
-    transform: translateX(0);
+  .card {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: var(--shadow-card);
   }
-  20%,
-  60% {
-    transform: translateX(-5px);
-  }
-  40%,
-  80% {
-    transform: translateX(5px);
-  }
-}
 
-.animate-shake {
-  animation: shake 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  .popover-surface {
+    background-color: var(--popover);
+    border: 1px solid var(--popover-border);
+    box-shadow: var(--shadow-pop);
+  }
+
+  .btn-accent {
+    background: linear-gradient(135deg, var(--accent-strong), var(--accent-2));
+    color: #FFFFFF;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 4px 14px -2px var(--accent-glow);
+    transition: transform 140ms cubic-bezier(0.16, 1, 0.3, 1), filter 140ms ease;
+  }
+  .btn-accent:hover {
+    filter: brightness(1.06);
+  }
+  .btn-accent:active {
+    transform: scale(0.965);
+  }
+  .btn-accent:disabled {
+    cursor: not-allowed;
+    filter: saturate(0.55);
+    box-shadow: none;
+  }
+
+  .btn-ghost {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    color: var(--text-2);
+    transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
+  }
+  .btn-ghost:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-3);
+    color: var(--text-1);
+  }
+
+  .input-base {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    color: var(--text-1);
+    transition: border-color 140ms ease, box-shadow 140ms ease;
+  }
+  .input-base::placeholder {
+    color: var(--text-4);
+  }
+  .input-base:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+
+  :where(button, a, [role='button'], input, select, textarea):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.4;
+    border-radius: 5px;
+    background: var(--surface-3);
+    border: 1px solid var(--border-strong);
+    color: var(--text-3);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  .ambient-glow {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    contain: strict;
+    opacity: var(--ambient-opacity);
+    background:
+      radial-gradient(circle at 14% 12%, var(--accent-glow), transparent 44%),
+      radial-gradient(circle at 86% 82%, var(--accent-glow), transparent 46%);
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--surface-1) 25%,
+      var(--surface-3) 50%,
+      var(--surface-1) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s infinite linear;
+    border-radius: 10px;
+  }
+
+  @keyframes shake {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    20%,
+    60% {
+      transform: translateX(-5px);
+    }
+    40%,
+    80% {
+      transform: translateX(5px);
+    }
+  }
+
+  .animate-shake {
+    animation: shake 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  }
+
+  /* ---------------------------------------------------------------------------
+     Motion
+     Every keyframe animates only opacity/transform so the compositor can run them
+     off the main thread - scrolling stays smooth even while several reveal at once.
+     --------------------------------------------------------------------------- */
+
+  @keyframes fade-up {
+    from { opacity: 0; transform: translate3d(0, 16px, 0); }
+    to   { opacity: 1; transform: translate3d(0, 0, 0); }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  @keyframes scale-in {
+    from { opacity: 0; transform: scale3d(0.96, 0.96, 1); }
+    to   { opacity: 1; transform: scale3d(1, 1, 1); }
+  }
+  @keyframes slide-down {
+    from { opacity: 0; transform: translate3d(0, -10px, 0); }
+    to   { opacity: 1; transform: translate3d(0, 0, 0); }
+  }
+  @keyframes pop-in {
+    0%   { opacity: 0; transform: scale3d(0.94, 0.94, 1); }
+    60%  { opacity: 1; transform: scale3d(1.015, 1.015, 1); }
+    100% { opacity: 1; transform: scale3d(1, 1, 1); }
+  }
+
+  .animate-fade-up    { animation: fade-up 0.55s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .animate-fade-in    { animation: fade-in 0.5s ease both; }
+  .animate-scale-in   { animation: scale-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .animate-slide-down { animation: slide-down 0.32s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .animate-pop-in     { animation: pop-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+  /* Stagger children by 60ms, but only once the container is revealed. The container itself does
+     not fade in this mode - the children carry the animation. */
+  .reveal.stagger { opacity: 1; transform: none; }
+  .reveal.stagger > * { opacity: 0; }
+  .reveal.stagger.is-visible > * {
+    animation: fade-up 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: var(--stagger-delay, 0ms);
+  }
+  .reveal.stagger.is-visible > *:nth-child(1) { --stagger-delay: 0ms; }
+  .reveal.stagger.is-visible > *:nth-child(2) { --stagger-delay: 60ms; }
+  .reveal.stagger.is-visible > *:nth-child(3) { --stagger-delay: 120ms; }
+  .reveal.stagger.is-visible > *:nth-child(4) { --stagger-delay: 180ms; }
+  .reveal.stagger.is-visible > *:nth-child(5) { --stagger-delay: 240ms; }
+  .reveal.stagger.is-visible > *:nth-child(6) { --stagger-delay: 300ms; }
+  .reveal.stagger.is-visible > *:nth-child(7) { --stagger-delay: 360ms; }
+  .reveal.stagger.is-visible > *:nth-child(8) { --stagger-delay: 420ms; }
+
+  /* Scroll reveal: JS adds .is-visible when the element enters the viewport. */
+  .reveal {
+    opacity: 0;
+    transform: translate3d(0, 18px, 0);
+    transition:
+      opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+      transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    transition-delay: var(--reveal-delay, 0ms);
+    will-change: opacity, transform;
+  }
+  .reveal.is-visible {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    /* Drop the compositor hint once settled so idle elements cost nothing. */
+    will-change: auto;
+  }
+
+  /* On-load stagger: children animate in sequence the moment the page paints.
+     Used for above-the-fold content (hero) where waiting for a scroll observer
+     would delay the first thing the visitor sees. */
+  .reveal-stagger > * {
+    animation: fade-up 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: var(--stagger-delay, 0ms);
+  }
+  .reveal-stagger > *:nth-child(1) { --stagger-delay: 40ms; }
+  .reveal-stagger > *:nth-child(2) { --stagger-delay: 110ms; }
+  .reveal-stagger > *:nth-child(3) { --stagger-delay: 180ms; }
+  .reveal-stagger > *:nth-child(4) { --stagger-delay: 250ms; }
+  .reveal-stagger > *:nth-child(5) { --stagger-delay: 320ms; }
+  .reveal-stagger > *:nth-child(6) { --stagger-delay: 390ms; }
+  .reveal-stagger > *:nth-child(7) { --stagger-delay: 460ms; }
+  .reveal-stagger > *:nth-child(8) { --stagger-delay: 530ms; }
+
+  /* Animated underline that grows from the left on hover - cheaper than a border swap
+     (transform only, no layout) and reads as more polished. */
+  .link-underline {
+    position: relative;
+  }
+  .link-underline::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -2px;
+    height: 1.5px;
+    background: currentColor;
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @media (hover: hover) {
+    .link-underline:hover::after {
+      transform: scaleX(1);
+    }
+  }
+
+  /* Press feedback: buttons dip slightly on tap so the UI feels physical. */
+  .press:active,
+  .btn-accent:active,
+  .btn-ghost:active {
+    transform: scale3d(0.97, 0.97, 1);
+  }
+  .btn-accent,
+  .btn-ghost {
+    transition:
+      transform 120ms cubic-bezier(0.16, 1, 0.3, 1),
+      background-color 180ms ease,
+      color 180ms ease,
+      border-color 180ms ease,
+      box-shadow 180ms ease;
+  }
+
+  /* Subtle lift on hover for cards and tiles - transform only, so it stays cheap. */
+  .hover-lift {
+    transition:
+      transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 180ms ease,
+      border-color 180ms ease;
+  }
+  @media (hover: hover) {
+    .hover-lift:hover {
+      transform: translate3d(0, -3px, 0);
+      box-shadow: var(--shadow-pop);
+      border-color: var(--border-strong);
+    }
+  }
+  .hover-lift:active { transform: translate3d(0, -1px, 0); }
+
+  /* On touch devices give button-styled controls a comfortable 40px minimum. Scoped to the button
+     classes (not bare <button>) so dense inline chips and text links keep their compact layout. */
+  @media (pointer: coarse), (max-width: 767px) {
+    .btn-accent,
+    .btn-ghost {
+      min-height: 40px;
+    }
+  }
+
+  /* Slim, theme-aware scrollbars. */
+  * {
+    scrollbar-color: var(--border-strong) transparent;
+    scrollbar-width: thin;
+  }
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover { background: var(--text-4); background-clip: content-box; }
+
+  /* Respect iOS notch/home indicator when content is edge-to-edge. */
+  .pad-safe-x { padding-left: max(1rem, env(safe-area-inset-left)); padding-right: max(1rem, env(safe-area-inset-right)); }
+  .pad-safe-b { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -313,6 +516,18 @@
     animation: none !important;
   }
   .btn-accent:active {
+    transform: none !important;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+  /* Reveal-on-scroll must not leave content invisible when motion is off. */
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .hover-lift:hover,
+  .hover-lift:active {
     transform: none !important;
   }
 }

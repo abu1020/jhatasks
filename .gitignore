@@ -6,3 +6,19 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Local UI/UX measurement scripts (headless Chromium probes used during development)
+audit.mjs
+animcheck.mjs
+cardprobe.mjs
+clipped.mjs
+contrastprobe.mjs
+darkprobe.mjs
+hdr.mjs
+hdr2.mjs
+kbdtest.mjs
+measure.mjs
+probe.mjs
+shot.mjs
+verify.mjs
+shots/

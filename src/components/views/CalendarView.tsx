@@ -145,7 +145,7 @@ function DroppableMonthCell({
         <span
           className={`w-6 h-6 rounded-full text-xs font-semibold inline-flex items-center justify-center tnum ${
             isToday
-              ? 'bg-[var(--accent)] text-white'
+              ? 'bg-[var(--accent)] text-white dark:text-[var(--bg)]'
               : 'text-[var(--text-2)]'
           }`}
         >
@@ -487,7 +487,7 @@ export function CalendarView() {
               type="button"
               onClick={() => handleNavigate(-1)}
               aria-label="Previous period"
-              className="p-2 rounded-lg hover:bg-[var(--surface-3)] text-[var(--text-2)] min-w-[36px] min-h-[36px] inline-flex items-center justify-center"
+              className="p-2 rounded-lg hover:bg-[var(--surface-3)] text-[var(--text-2)] min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] inline-flex items-center justify-center"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
@@ -502,7 +502,7 @@ export function CalendarView() {
               type="button"
               onClick={() => handleNavigate(1)}
               aria-label="Next period"
-              className="p-2 rounded-lg hover:bg-[var(--surface-3)] text-[var(--text-2)] min-w-[36px] min-h-[36px] inline-flex items-center justify-center"
+              className="p-2 rounded-lg hover:bg-[var(--surface-3)] text-[var(--text-2)] min-w-[44px] min-h-[44px] sm:min-w-[36px] sm:min-h-[36px] inline-flex items-center justify-center"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -641,7 +641,7 @@ export function CalendarView() {
                             !dMonth ? 'opacity-40' : ''
                           } ${
                             isSel
-                              ? 'bg-[var(--accent)] text-white'
+                              ? 'bg-[var(--accent)] text-white dark:text-[var(--bg)]'
                               : isTd
                               ? 'border border-[var(--accent)] text-[var(--accent)]'
                               : 'text-[var(--text-1)] hover:bg-[var(--surface-3)]'
@@ -726,7 +726,7 @@ export function CalendarView() {
                           onClick={() => setCalendarDate(dStr)}
                           className={`py-1.5 rounded-xl flex flex-col items-center text-[11px] font-semibold tnum ${
                             active
-                              ? 'bg-[var(--accent)] text-white'
+                              ? 'bg-[var(--accent)] text-white dark:text-[var(--bg)]'
                               : 'text-[var(--text-2)]'
                           }`}
                         >
@@ -764,7 +764,7 @@ export function CalendarView() {
                           <div
                             className={`mt-0.5 inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold tnum ${
                               isTd
-                                ? 'bg-[var(--accent)] text-white'
+                                ? 'bg-[var(--accent)] text-white dark:text-[var(--bg)]'
                                 : 'text-[var(--text-1)]'
                             }`}
                           >
